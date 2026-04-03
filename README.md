@@ -250,9 +250,11 @@ envctl init
 
 ## CI/CD usage
 
-### GitHub Actions (reusable workflow)
+The Docker image (`ghcr.io/pillowpillow/envctl`) bundles envctl, sops, and age -- no prerequisites to install.
 
-envctl provides a reusable workflow for verification in CI:
+### GitHub Actions -- reusable workflow (recommended)
+
+The simplest way. Add to your project's workflow:
 
 ```yaml
 jobs:
@@ -264,23 +266,23 @@ jobs:
       sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
 ```
 
-### Direct usage
+To also generate the `.env` file as a downloadable artifact:
 
 ```yaml
-- name: Install envctl
-  run: |
-    curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_linux_amd64.tar.gz | tar -xz
-    sudo mv envctl /usr/local/bin/
-
-- name: Verify & generate
-  env:
-    SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-  run: |
-    envctl verify --env production --strict
-    envctl generate --env production --output .env
+jobs:
+  envctl:
+    uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
+    with:
+      environment: production
+      generate: true
+      output-path: .env
+    secrets:
+      sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
 ```
 
-### Docker
+### GitHub Actions -- Docker step
+
+If you need envctl as a step inside an existing job:
 
 ```yaml
 - name: Verify environment
@@ -290,6 +292,41 @@ jobs:
       -e SOPS_AGE_KEY=${{ secrets.SOPS_AGE_KEY }} \
       ghcr.io/pillowpillow/envctl:latest \
       verify --env production --strict
+
+- name: Generate .env
+  run: |
+    docker run --rm \
+      -v ${{ github.workspace }}:/workspace \
+      -e SOPS_AGE_KEY=${{ secrets.SOPS_AGE_KEY }} \
+      ghcr.io/pillowpillow/envctl:latest \
+      generate --env production -o .env
+```
+
+### Without Docker
+
+If you can't use Docker, install the binary directly. This requires sops and age to be installed separately:
+
+```yaml
+- name: Install envctl
+  run: |
+    curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_linux_amd64.tar.gz | tar -xz
+    sudo mv envctl /usr/local/bin/
+
+- name: Install sops & age
+  run: |
+    # sops
+    curl -sLO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
+    sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops && sudo chmod +x /usr/local/bin/sops
+    # age
+    curl -sL https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar -xz
+    sudo mv age/age age/age-keygen /usr/local/bin/
+
+- name: Verify & generate
+  env:
+    SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+  run: |
+    envctl verify --env production --strict
+    envctl generate --env production --output .env
 ```
 
 ## Project structure
