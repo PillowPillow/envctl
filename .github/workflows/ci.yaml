@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   GOPROXY: "https://proxy.golang.org,off"
   GOFLAGS: "-mod=readonly"
