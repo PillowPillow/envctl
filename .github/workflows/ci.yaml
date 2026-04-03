@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write
+  # security-events: write  # requires GitHub Advanced Security (paid for private repos)
 
 env:
   GOPROXY: "https://proxy.golang.org,off"
@@ -42,18 +42,19 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
-      - name: gosec SARIF
-        if: always()
-        run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -fmt=sarif -out=gosec.sarif -no-fail ./...
-
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
-        if: always()
-        continue-on-error: true # requires Code Scanning enabled in repo settings
-        with:
-          sarif_file: gosec.sarif
+      # Uncomment to enable gosec SARIF upload to GitHub Security tab.
+      # Requires GitHub Advanced Security (paid for private repos).
+      # - name: gosec SARIF
+      #   if: always()
+      #   run: |
+      #     go install github.com/securego/gosec/v2/cmd/gosec@latest
+      #     gosec -fmt=sarif -out=gosec.sarif -no-fail ./...
+      #
+      # - name: Upload SARIF
+      #   uses: github/codeql-action/upload-sarif@3b1a19a80ab047f35cbb237b5bd9bdc1e14f166c # v3
+      #   if: always()
+      #   with:
+      #     sarif_file: gosec.sarif
 
   test:
     runs-on: ubuntu-latest
