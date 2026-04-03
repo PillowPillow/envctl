@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -33,6 +34,11 @@ func runUpdate() error {
 func runUpdateWith(client *updater.GitHubClient) error {
 	if appVersion == "dev" {
 		color.Yellow("Development mode, update not available.")
+		return nil
+	}
+
+	if isHomebrewInstall() {
+		color.Yellow("envctl is managed by Homebrew. Run 'brew upgrade envctl' instead.")
 		return nil
 	}
 
@@ -78,4 +84,18 @@ func runUpdateWith(client *updater.GitHubClient) error {
 func configDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".envctl")
+}
+
+// isHomebrewInstall returns true if the current binary is managed by Homebrew.
+func isHomebrewInstall() bool {
+	execPath, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	resolved, err := filepath.EvalSymlinks(execPath)
+	if err != nil {
+		return false
+	}
+	// Homebrew installs live under /opt/homebrew/Cellar or /usr/local/Cellar.
+	return strings.Contains(resolved, "/Cellar/")
 }
