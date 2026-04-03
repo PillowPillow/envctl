@@ -1,0 +1,71 @@
+# Reusable workflow for consumer repos.
+# Uses the pre-built Docker image — zero install time.
+#
+# Usage in your project's .github/workflows/ci.yaml:
+#
+#   jobs:
+#     envctl:
+#       uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
+#       with:
+#         environment: production
+#       secrets:
+#         sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+
+name: envctl verify
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Environment to verify (e.g. production, staging)"
+        required: true
+        type: string
+      envctl-version:
+        description: "envctl image tag (e.g. 0.1.0, latest)"
+        required: false
+        type: string
+        default: latest
+      generate:
+        description: "Also run envctl generate after verify"
+        required: false
+        type: boolean
+        default: false
+      output-path:
+        description: "Output path for generate (default: .env)"
+        required: false
+        type: string
+        default: .env
+    secrets:
+      sops-age-key:
+        description: "Age private key for SOPS decryption"
+        required: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify environment
+        env:
+          SOPS_AGE_KEY: ${{ secrets.sops-age-key }}
+        run: envctl verify --env ${{ inputs.environment }} --strict
+
+      - name: Generate env file
+        if: ${{ inputs.generate }}
+        env:
+          SOPS_AGE_KEY: ${{ secrets.sops-age-key }}
+        run: envctl generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
+
+      - name: Upload generated env
+        if: ${{ inputs.generate }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: env-${{ inputs.environment }}
+          path: ${{ inputs.output-path }}
+          retention-days: 1

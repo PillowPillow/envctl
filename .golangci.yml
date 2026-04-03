@@ -1,0 +1,40 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofumpt
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - errorlint
+    - gocritic
+    - revive
+    - misspell
+    - gosec
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Printf
+    gosec:
+      excludes:
+        - G301 # file permissions — legitimate for CLI tool
+        - G302
+        - G306
+        - G101 # false positives on field name "Secrets"
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: unused-parameter
+          disabled: true
+
+run:
+  go: "1.26"
