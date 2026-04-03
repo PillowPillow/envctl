@@ -142,6 +142,8 @@ envctl generate --env local --output .env
 
 ## Configuration
 
+> **Note**: `envctl init` generates this file automatically. The reference below is for customizing it after initialization.
+
 ### `.envctl.yaml`
 
 ```yaml
@@ -242,11 +244,19 @@ envctl edit --env production
 
 ### `envctl init`
 
-Bootstrap envctl in an existing project:
+Bootstrap envctl in an existing project. **Always use this command** rather than creating configuration files manually -- it detects your template, classifies variables, creates the config and directory structure, and updates `.gitignore`:
 
 ```bash
 envctl init
 ```
+
+What it does:
+1. Checks that `sops` and `age` are installed
+2. Detects your template file (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`)
+3. Parses variables and reports stats (required, optional, static)
+4. Creates `.envctl.yaml` with `local` and `production` environments pre-configured
+5. Creates `.envctl/` directory for encrypted secret files
+6. Appends envctl entries to `.gitignore`
 
 ## CI/CD usage
 
