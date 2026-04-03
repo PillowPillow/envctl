@@ -26,23 +26,43 @@ Secrets are stored in SOPS/age-encrypted YAML files committed to the repo. Keys 
 
 ## Installation
 
-### From GitHub Releases
-
-Download the latest binary from [Releases](https://github.com/PillowPillow/envctl/releases):
+### Homebrew (macOS/Linux)
 
 ```bash
-# macOS (Apple Silicon)
-curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_darwin_arm64.tar.gz | tar -xz
-sudo mv envctl /usr/local/bin/
+# One-time setup: configure access to the private tap
+export HOMEBREW_GITHUB_API_TOKEN="ghp_your_token_here"  # add to your ~/.zshrc
 
-# macOS (Intel)
-curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_darwin_amd64.tar.gz | tar -xz
-sudo mv envctl /usr/local/bin/
-
-# Linux (amd64)
-curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_linux_amd64.tar.gz | tar -xz
-sudo mv envctl /usr/local/bin/
+brew install pillowpillow/tap/envctl
 ```
+
+To create your `HOMEBREW_GITHUB_API_TOKEN`:
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+2. Scope: repository `PillowPillow/homebrew-tap`, permission **Contents: Read-only**
+3. Add `export HOMEBREW_GITHUB_API_TOKEN="ghp_..."` to your shell profile (`~/.zshrc` or `~/.bashrc`)
+
+Update:
+```bash
+brew upgrade envctl
+```
+
+### Install script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | bash
+```
+
+Installs to `~/.envctl/bin/envctl`. Optional environment variables:
+- `ENVCTL_VERSION` -- pin a specific version (default: latest)
+- `GITHUB_TOKEN` -- for private repo access
+- `INSTALL_DIR` -- custom install path (default: `~/.envctl/bin`)
+
+### Self-update
+
+```bash
+envctl update
+```
+
+envctl also checks for updates in the background (once every 24h) and notifies you when a new version is available.
 
 ### Docker
 
@@ -318,9 +338,7 @@ If you can't use Docker, install the binary directly. This requires sops and age
 
 ```yaml
 - name: Install envctl
-  run: |
-    curl -sL https://github.com/PillowPillow/envctl/releases/latest/download/envctl_linux_amd64.tar.gz | tar -xz
-    sudo mv envctl /usr/local/bin/
+  run: curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin bash
 
 - name: Install sops & age
   run: |
