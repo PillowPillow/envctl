@@ -36,6 +36,8 @@ brews:
   - repository:
       owner: PillowPillow
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    skip_upload: auto # uploads only when HOMEBREW_TAP_TOKEN is set
     homepage: "https://github.com/PillowPillow/envctl"
     description: "Environment configuration manager with SOPS encryption"
     install: |
