@@ -8,6 +8,7 @@
 #       uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
 #       with:
 #         environment: production
+#         github-environment: production
 #       secrets:
 #         sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
 
@@ -35,6 +36,10 @@ on:
         required: false
         type: string
         default: .env
+      github-environment:
+        description: "GitHub environment to use for accessing secrets (e.g. production)"
+        required: false
+        type: string
     secrets:
       sops-age-key:
         description: "Age private key for SOPS decryption"
@@ -43,6 +48,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.github-environment || '' }}
     container:
       image: ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
       credentials:
