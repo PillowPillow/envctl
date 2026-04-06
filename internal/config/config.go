@@ -13,6 +13,8 @@ type Config struct {
 	Template     string                 `yaml:"template"`
 	Environments map[string]Environment `yaml:"environments"`
 	SOPS         SOPSConfig             `yaml:"sops"`
+
+	configPath string // set by Load, used by Save
 }
 
 type Environment struct {
@@ -23,7 +25,7 @@ type Environment struct {
 }
 
 type SOPSConfig struct {
-	AgeRecipients []string `yaml:"age_recipients"`
+	AgeRecipients map[string]string `yaml:"age_recipients"`
 }
 
 const DefaultConfigFile = ".envctl.yaml"
@@ -44,7 +46,37 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("invalid config %s: %w", path, err)
 	}
 
+	cfg.configPath = path
 	return &cfg, nil
+}
+
+// ConfigPath returns the path the config was loaded from.
+func (c *Config) ConfigPath() string {
+	return c.configPath
+}
+
+// Save writes the config back to the file it was loaded from.
+func (c *Config) Save() error {
+	if c.configPath == "" {
+		return fmt.Errorf("config path not set (config was not loaded from a file)")
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("cannot marshal config: %w", err)
+	}
+	if err := os.WriteFile(c.configPath, data, 0o644); err != nil { //nolint:gosec // same permissions as init
+		return fmt.Errorf("cannot write config %s: %w", c.configPath, err)
+	}
+	return nil
+}
+
+// AgeRecipientKeys returns the age public keys as a slice (map values).
+func (c *Config) AgeRecipientKeys() []string {
+	keys := make([]string, 0, len(c.SOPS.AgeRecipients))
+	for _, key := range c.SOPS.AgeRecipients {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 // FindConfigFile walks up from the current directory looking for .envctl.yaml.

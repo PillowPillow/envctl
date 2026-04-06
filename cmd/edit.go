@@ -44,7 +44,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	// If the encrypted file doesn't exist yet, bootstrap it by encrypting an empty YAML
 	if _, err := os.Stat(env.Secrets); os.IsNotExist(err) {
 		if len(cfg.SOPS.AgeRecipients) == 0 {
-			return fmt.Errorf("no age recipients configured in sops.age_recipients — cannot create encrypted file")
+			return fmt.Errorf("no age recipients configured — add one with: envctl keys add <name> <age1...>")
 		}
 		if err := os.MkdirAll(filepath.Dir(env.Secrets), 0o755); err != nil {
 			return fmt.Errorf("cannot create directory for secrets file: %w", err)
@@ -54,7 +54,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		}
 
 		// Encrypt the seed file in-place so sops recognises it
-		encryptArgs := []string{"--encrypt", "--in-place", "--age", strings.Join(cfg.SOPS.AgeRecipients, ","), env.Secrets}
+		encryptArgs := []string{"--encrypt", "--in-place", "--age", strings.Join(cfg.AgeRecipientKeys(), ","), env.Secrets}
 		encCmd := exec.Command(sopsPath, encryptArgs...) //nolint:gosec // sops binary from LookPath, args from validated config
 		encCmd.Stderr = os.Stderr
 		if err := encCmd.Run(); err != nil {

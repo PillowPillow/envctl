@@ -76,7 +76,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 			},
 		},
 		SOPS: config.SOPSConfig{
-			AgeRecipients: []string{"# Add your age public key here: age1..."},
+			AgeRecipients: map[string]string{},
 		},
 	}
 
@@ -100,7 +100,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Generate an age key pair:")
 	fmt.Println("       age-keygen -o ~/.config/sops/age/keys.txt")
-	fmt.Println("  2. Add your public key to .envctl.yaml under sops.age_recipients")
+	fmt.Println("  2. Add your public key as a recipient:")
+	fmt.Println("       envctl keys add <your-name> <age1...public-key>")
 	fmt.Println("  3. Create your first secrets file:")
 	fmt.Println("       envctl edit --env local")
 	fmt.Println("  4. Verify your setup:")

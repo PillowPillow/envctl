@@ -31,7 +31,7 @@ environments:
       - DEBUG_VAR
 sops:
   age_recipients:
-    - age1abc123
+    alice: age1abc123
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".envctl.yaml")
