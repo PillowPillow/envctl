@@ -17,6 +17,7 @@ type Config struct {
 
 type Environment struct {
 	Secrets   string            `yaml:"secrets"`
+	Output    string            `yaml:"output"`
 	Overrides map[string]string `yaml:"overrides"`
 	Strip     []string          `yaml:"strip"`
 }

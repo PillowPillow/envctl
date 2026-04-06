@@ -15,8 +15,14 @@ template: .env.example
 environments:
   local:
     secrets: .envctl/secrets.local.enc.yaml
+    output: .env
     overrides:
       APP_ENV: local
+  e2e:
+    secrets: .envctl/secrets.local.enc.yaml
+    output: .env.e2e
+    overrides:
+      APP_ENV: e2e
   production:
     secrets: .envctl/secrets.production.enc.yaml
     overrides:
@@ -36,15 +42,21 @@ sops:
 
 	assert.Equal(t, "1", cfg.Version)
 	assert.Equal(t, ".env.example", cfg.Template)
-	assert.Len(t, cfg.Environments, 2)
+	assert.Len(t, cfg.Environments, 3)
 
 	local, err := cfg.GetEnvironment("local")
 	require.NoError(t, err)
 	assert.Equal(t, "local", local.Overrides["APP_ENV"])
+	assert.Equal(t, ".env", local.Output)
+
+	e2e, err := cfg.GetEnvironment("e2e")
+	require.NoError(t, err)
+	assert.Equal(t, ".env.e2e", e2e.Output)
 
 	prod, err := cfg.GetEnvironment("production")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"DEBUG_VAR"}, prod.Strip)
+	assert.Empty(t, prod.Output)
 
 	_, err = cfg.GetEnvironment("nonexistent")
 	assert.Error(t, err)

@@ -68,15 +68,20 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	output := parser.Render(parsed, rs.Values())
 
-	if dryRun || outputPath == "" {
+	dest := outputPath
+	if dest == "" {
+		dest = env.Output
+	}
+
+	if dryRun || dest == "" {
 		fmt.Print(output)
 		return nil
 	}
 
-	if err := os.WriteFile(outputPath, []byte(output), 0o600); err != nil {
-		return fmt.Errorf("cannot write output file %s: %w", outputPath, err)
+	if err := os.WriteFile(dest, []byte(output), 0o600); err != nil {
+		return fmt.Errorf("cannot write output file %s: %w", dest, err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Generated %s for environment %q\n", outputPath, envName)
+	fmt.Fprintf(os.Stderr, "Generated %s for environment %q\n", dest, envName)
 	return nil
 }
