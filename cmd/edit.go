@@ -41,8 +41,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: Install sops:\n    brew install sops")
 	}
 
-	// If the encrypted file doesn't exist yet, bootstrap it
-	isNew := false
+	// If the encrypted file doesn't exist yet, bootstrap it by encrypting an empty YAML
 	if _, err := os.Stat(env.Secrets); os.IsNotExist(err) {
 		if len(cfg.SOPS.AgeRecipients) == 0 {
 			return fmt.Errorf("no age recipients configured in sops.age_recipients — cannot create encrypted file")
@@ -53,26 +52,24 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(env.Secrets, []byte("{}\n"), 0o600); err != nil {
 			return fmt.Errorf("cannot create secrets file: %w", err)
 		}
-		isNew = true
+
+		// Encrypt the seed file in-place so sops recognises it
+		encryptArgs := []string{"--encrypt", "--in-place", "--age", strings.Join(cfg.SOPS.AgeRecipients, ","), env.Secrets}
+		encCmd := exec.Command(sopsPath, encryptArgs...) //nolint:gosec // sops binary from LookPath, args from validated config
+		encCmd.Stderr = os.Stderr
+		if err := encCmd.Run(); err != nil {
+			os.Remove(env.Secrets) //nolint:errcheck,gosec // best-effort cleanup
+			return fmt.Errorf("failed to encrypt new secrets file: %w", err)
+		}
 	}
 
-	// Build sops command — new files need explicit age recipients
-	sopsArgs := []string{}
-	if isNew {
-		sopsArgs = append(sopsArgs, "--age", strings.Join(cfg.SOPS.AgeRecipients, ","))
-	}
-	sopsArgs = append(sopsArgs, env.Secrets)
-
-	sopsCmd := exec.Command(sopsPath, sopsArgs...) //nolint:gosec // sops binary from LookPath, args from validated config
+	// Shell out to sops edit
+	sopsCmd := exec.Command(sopsPath, env.Secrets) //nolint:gosec // sops binary from LookPath, arg from validated config
 	sopsCmd.Stdin = os.Stdin
 	sopsCmd.Stdout = os.Stdout
 	sopsCmd.Stderr = os.Stderr
 
 	if err := sopsCmd.Run(); err != nil {
-		// Clean up the unencrypted seed file if sops failed on first creation
-		if isNew {
-			os.Remove(env.Secrets) //nolint:errcheck,gosec // best-effort cleanup
-		}
 		return fmt.Errorf("sops edit failed: %w", err)
 	}
 
