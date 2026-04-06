@@ -88,19 +88,19 @@ This will:
 - Create `.envctl/` directory for encrypted secret files
 - Update `.gitignore`
 
-### 2. Generate an age key pair
+### 2. Generate an age key pair and add it as a recipient
 
 ```bash
 age-keygen -o ~/.config/sops/age/keys.txt
 ```
 
-Copy the public key (starts with `age1...`) and add it to `.envctl.yaml`:
+Copy the public key (starts with `age1...`) and register it:
 
-```yaml
-sops:
-  age_recipients:
-    - age1ql3z7hjy54pw3hyww5ayf...  # Your name
+```bash
+envctl keys add your-name age1ql3z7hjy54pw3hyww5ayf...
 ```
+
+This adds the key to `.envctl.yaml` and re-encrypts any existing secrets files.
 
 ### 3. Create your secrets file
 
@@ -172,11 +172,22 @@ environments:
       - DEBUG_VAR         # dev-only, remove from output
       - COMPOSE_PROJECT_NAME
 
-# SOPS encryption recipients
+# SOPS encryption recipients (managed via envctl keys)
 sops:
   age_recipients:
-    - age1ql3z7hjy54pw3hyww5ayf...   # Developer 1
-    # - age1abc123...                  # Developer 2
+    alice: age1ql3z7hjy54pw3hyww5ayf...
+    ci: age1abc123...
+```
+
+### `sops.age_recipients`
+
+Named map of age public keys. Managed via `envctl keys`:
+
+```yaml
+sops:
+  age_recipients:
+    alice: age1ql3z7hjy54pw3hyww5ayf...
+    ci: age1abc123...
 ```
 
 ### Substitution priority
@@ -236,6 +247,16 @@ Comparing staging -> production:
   2 difference(s)
 ```
 
+### `envctl keys`
+
+Manage age encryption recipients:
+
+```bash
+envctl keys list                    # List configured recipients
+envctl keys add <name> <age1...>    # Add recipient + re-encrypt secrets
+envctl keys remove <name>           # Remove recipient + re-encrypt secrets
+```
+
 ### `envctl edit`
 
 Open the encrypted secrets file in your editor:
@@ -274,9 +295,11 @@ jobs:
     uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
     with:
       environment: production
-    secrets:
-      sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+      github-environment: production
+    secrets: inherit
 ```
+
+The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored. The workflow reads the secret directly -- callers just need `secrets: inherit`.
 
 To also generate the `.env` file as a downloadable artifact:
 
@@ -286,10 +309,10 @@ jobs:
     uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
     with:
       environment: production
+      github-environment: production
       generate: true
       output-path: .env
-    secrets:
-      sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+    secrets: inherit
 ```
 
 ### GitHub Actions -- Docker step
@@ -356,17 +379,33 @@ your-project/
 
 Encrypted files are safe to commit -- keys are readable for review, values are encrypted with age.
 
-## Adding a new team member
+## Managing recipients
 
-1. They generate an age key pair: `age-keygen -o ~/.config/sops/age/keys.txt`
-2. They share their public key (`age1...`)
-3. You add it to `.envctl.yaml` under `sops.age_recipients`
-4. Re-encrypt all secrets files with the updated recipients:
-   ```bash
-   sops updatekeys .envctl/secrets.local.enc.yaml
-   sops updatekeys .envctl/secrets.production.enc.yaml
-   ```
-5. Commit and push
+### Add a team member
+
+```bash
+# They generate a key pair
+age-keygen -o ~/.config/sops/age/keys.txt
+
+# They share their public key, you add it
+envctl keys add alice age1ql3z7hjy54pw3hyww5ayf...
+```
+
+This adds the key to `.envctl.yaml` and re-encrypts all secrets files automatically.
+
+### Add a CI key
+
+```bash
+age-keygen  # copy private key → GitHub repo secret SOPS_AGE_KEY
+envctl keys add ci age1abc123...
+```
+
+### List / remove recipients
+
+```bash
+envctl keys list
+envctl keys remove alice
+```
 
 ## Development
 

@@ -70,6 +70,7 @@ type Provider interface {
 - `generate` -- Produce .env file from template + secrets
 - `diff` -- Compare two environments side-by-side
 - `edit` -- Open encrypted secrets in $EDITOR via sops
+- `keys list|add|remove` -- Manage age encryption recipients
 
 Persistent flags: `--config` (path to .envctl.yaml), `--env` (target environment name).
 
