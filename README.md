@@ -285,9 +285,49 @@ What it does:
 
 The Docker image (`ghcr.io/pillowpillow/envctl`) bundles envctl, sops, and age -- no prerequisites to install.
 
-### GitHub Actions -- reusable workflow (recommended)
+### GitHub Actions -- composite action (recommended)
 
-The simplest way. Add to your project's workflow:
+Use the action as steps in your build job. The `.env` file stays in the workspace -- no artifacts, no secrets leaking:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: PillowPillow/envctl@main
+        with:
+          command: verify
+          environment: production
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+
+      - uses: PillowPillow/envctl@main
+        with:
+          command: generate
+          environment: production
+          output-path: .env.production
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+
+      - run: npm run build  # .env.production is in the workspace
+```
+
+Action inputs:
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `command` | yes | | `verify` or `generate` |
+| `environment` | yes | | Target environment name |
+| `envctl-version` | no | `latest` | Docker image tag |
+| `output-path` | no | `.env` | Output path for generate |
+| `strict` | no | `true` | Treat warnings as errors (verify only) |
+
+### GitHub Actions -- reusable workflow (verify only)
+
+For a standalone verification check (e.g. as a required status check on PRs):
 
 ```yaml
 jobs:
@@ -299,72 +339,7 @@ jobs:
     secrets: inherit
 ```
 
-The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored. The workflow reads the secret directly -- callers just need `secrets: inherit`.
-
-To also generate the `.env` file as a downloadable artifact:
-
-```yaml
-jobs:
-  envctl:
-    uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
-    with:
-      environment: production
-      github-environment: production
-      generate: true
-      output-path: .env
-    secrets: inherit
-```
-
-### GitHub Actions -- Docker step
-
-If you need envctl as a step inside an existing job:
-
-```yaml
-- name: Verify environment
-  run: |
-    docker run --rm \
-      -v ${{ github.workspace }}:/workspace \
-      -e SOPS_AGE_KEY=${{ secrets.SOPS_AGE_KEY }} \
-      ghcr.io/pillowpillow/envctl:latest \
-      verify --env production --strict
-
-- name: Generate .env
-  run: |
-    docker run --rm \
-      -v ${{ github.workspace }}:/workspace \
-      -e SOPS_AGE_KEY=${{ secrets.SOPS_AGE_KEY }} \
-      ghcr.io/pillowpillow/envctl:latest \
-      generate --env production -o .env
-```
-
-### Without Docker
-
-If you can't use Docker, install the binary directly. This requires sops and age to be installed separately:
-
-```yaml
-- name: Install envctl
-  env:
-    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  run: |
-    gh api repos/PillowPillow/envctl/contents/scripts/install.sh --jq '.content' \
-      | base64 -d | GITHUB_TOKEN="${GH_TOKEN}" INSTALL_DIR=/usr/local/bin bash
-
-- name: Install sops & age
-  run: |
-    # sops
-    curl -sLO https://github.com/getsops/sops/releases/download/v3.9.4/sops-v3.9.4.linux.amd64
-    sudo mv sops-v3.9.4.linux.amd64 /usr/local/bin/sops && sudo chmod +x /usr/local/bin/sops
-    # age
-    curl -sL https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz | tar -xz
-    sudo mv age/age age/age-keygen /usr/local/bin/
-
-- name: Verify & generate
-  env:
-    SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-  run: |
-    envctl verify --env production --strict
-    envctl generate --env production --output .env
-```
+The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored.
 
 ## Project structure
 

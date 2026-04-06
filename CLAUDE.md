@@ -81,3 +81,9 @@ Uses golangci-lint v2 with gofumpt formatting. Key enabled linters: errcheck, go
 ## Release
 
 GoReleaser builds multi-arch binaries (linux/darwin, amd64/arm64). Docker images pushed to `ghcr.io/pillowpillow/envctl`. CI runs on GitHub Actions (`ci.yaml` for PR checks, `release.yaml` on tag push).
+
+## GitHub Actions Integration
+
+- `action.yaml` -- Composite action for consumers to use envctl as a step (verify/generate)
+- `.github/workflows/envctl-verify.yaml` -- Reusable workflow for standalone verify checks
+- Consumer repos use the composite action in their build job; the `.env` stays in the workspace (no artifacts).

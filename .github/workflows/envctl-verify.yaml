@@ -1,5 +1,4 @@
-# Reusable workflow for consumer repos.
-# Uses the pre-built Docker image — zero install time.
+# Reusable workflow for verifying envctl environments in CI.
 #
 # Usage in your project's .github/workflows/ci.yaml:
 #
@@ -25,16 +24,6 @@ on:
         required: false
         type: string
         default: latest
-      generate:
-        description: "Also run envctl generate after verify"
-        required: false
-        type: boolean
-        default: false
-      output-path:
-        description: "Output path for generate (default: .env)"
-        required: false
-        type: string
-        default: .env
       github-environment:
         description: "GitHub environment for accessing environment-scoped secrets"
         required: true
@@ -47,40 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Pull envctl image
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker pull ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
-
       - name: Verify environment
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e SOPS_AGE_KEY \
-            ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
-            verify --env ${{ inputs.environment }} --strict
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-
-      - name: Generate env file
-        if: ${{ inputs.generate }}
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -u "$(id -u):$(id -g)" \
-            -e SOPS_AGE_KEY \
-            ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
-            generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-
-      - name: Upload generated env
-        if: ${{ inputs.generate }}
-        uses: actions/upload-artifact@v7
+        uses: PillowPillow/envctl@main
         with:
-          name: env-${{ inputs.environment }}
-          path: ${{ inputs.output-path }}
-          include-hidden-files: true
-          retention-days: 1
+          command: verify
+          environment: ${{ inputs.environment }}
+          envctl-version: ${{ inputs.envctl-version }}
+        env:
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}

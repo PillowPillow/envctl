@@ -1,0 +1,54 @@
+name: envctl
+description: "Run envctl commands (verify, generate) using the Docker image"
+
+inputs:
+  command:
+    description: "Command to run: verify or generate"
+    required: true
+  environment:
+    description: "Target environment (e.g. production, staging, local)"
+    required: true
+  envctl-version:
+    description: "envctl image tag"
+    required: false
+    default: latest
+  output-path:
+    description: "Output path for generate (default: .env)"
+    required: false
+    default: .env
+  strict:
+    description: "Treat warnings as errors for verify"
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Pull envctl image
+      shell: bash
+      run: |
+        echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker pull ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
+
+    - name: Run envctl verify
+      if: inputs.command == 'verify'
+      shell: bash
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}:/workspace" \
+          -w /workspace \
+          -e SOPS_AGE_KEY \
+          ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
+          verify --env ${{ inputs.environment }}${{ inputs.strict == 'true' && ' --strict' || '' }}
+
+    - name: Run envctl generate
+      if: inputs.command == 'generate'
+      shell: bash
+      run: |
+        docker run --rm \
+          -v "${{ github.workspace }}:/workspace" \
+          -w /workspace \
+          -u "$(id -u):$(id -g)" \
+          -e SOPS_AGE_KEY \
+          ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
+          generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
