@@ -37,8 +37,9 @@ brew install pillowpillow/tap/envctl
 
 To create your `HOMEBREW_GITHUB_API_TOKEN`:
 1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Scope: repository `PillowPillow/homebrew-tap`, permission **Contents: Read-only**
-3. Add `export HOMEBREW_GITHUB_API_TOKEN="ghp_..."` to your shell profile (`~/.zshrc` or `~/.bashrc`)
+2. Repositories: select `PillowPillow/homebrew-tap` **and** `PillowPillow/envctl`
+3. Permission: **Contents: Read-only**
+4. Add `export HOMEBREW_GITHUB_API_TOKEN="ghp_..."` to your shell profile (`~/.zshrc` or `~/.bashrc`)
 
 Update:
 ```bash

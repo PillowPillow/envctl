@@ -39,6 +39,8 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     skip_upload: auto
+    url_headers:
+      - "Authorization: bearer #{ENV[\"HOMEBREW_GITHUB_API_TOKEN\"]}"
     homepage: "https://github.com/PillowPillow/envctl"
     description: "Environment configuration manager with SOPS encryption"
     install: |
