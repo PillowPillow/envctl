@@ -73,7 +73,6 @@ jobs:
             -e SOPS_AGE_KEY \
             ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
             generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
-          ls -la "${{ inputs.output-path }}"
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
@@ -83,4 +82,5 @@ jobs:
         with:
           name: env-${{ inputs.environment }}
           path: ${{ inputs.output-path }}
+          include-hidden-files: true
           retention-days: 1
