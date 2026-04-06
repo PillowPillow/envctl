@@ -44,24 +44,36 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     environment: ${{ inputs.github-environment }}
-    container:
-      image: ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
+      - name: Pull envctl image
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
+
       - name: Verify environment
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e SOPS_AGE_KEY \
+            ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
+            verify --env ${{ inputs.environment }} --strict
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: envctl verify --env ${{ inputs.environment }} --strict
 
       - name: Generate env file
         if: ${{ inputs.generate }}
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e SOPS_AGE_KEY \
+            ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
+            generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-        run: envctl generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
 
       - name: Upload generated env
         if: ${{ inputs.generate }}
