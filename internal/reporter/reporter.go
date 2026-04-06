@@ -51,13 +51,26 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 		}
 	}
 
-	// Print diagnostics
+	// Print diagnostics grouped by severity
+	hasErrors := false
 	for _, d := range rs.Diagnostics {
-		switch d.Severity {
-		case resolver.SeverityError:
-			fmt.Fprintf(w, "  %s MISSING required: %s\n", red("x"), bold(d.Variable))
-		case resolver.SeverityWarning:
-			fmt.Fprintf(w, "  %s UNUSED secret: %s\n", yellow("!"), d.Variable)
+		if d.Severity == resolver.SeverityError {
+			if !hasErrors {
+				fmt.Fprintf(w, "\n  Missing secrets:\n")
+				hasErrors = true
+			}
+			fmt.Fprintf(w, "    %s %s\n", red("x"), bold(d.Variable))
+		}
+	}
+
+	hasWarnings := false
+	for _, d := range rs.Diagnostics {
+		if d.Severity == resolver.SeverityWarning {
+			if !hasWarnings {
+				fmt.Fprintf(w, "\n  Unused secrets:\n")
+				hasWarnings = true
+			}
+			fmt.Fprintf(w, "    %s %s\n", yellow("!"), d.Variable)
 		}
 	}
 
