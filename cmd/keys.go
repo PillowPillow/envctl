@@ -135,7 +135,6 @@ func updateSecretsKeys(cfg *config.Config) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: brew install sops")
 	}
 
-	ageArg := strings.Join(keys, ",")
 	updated := 0
 
 	for envName, env := range cfg.Environments {
@@ -143,7 +142,8 @@ func updateSecretsKeys(cfg *config.Config) error {
 			continue
 		}
 
-		sopsCmd := exec.Command(sopsPath, "updatekeys", "--yes", "--age", ageArg, env.Secrets) //nolint:gosec // sops from LookPath, args from config
+		sopsCmd := exec.Command(sopsPath, "updatekeys", "--yes", env.Secrets) //nolint:gosec // sops from LookPath, args from config
+		sopsCmd.Env = append(os.Environ(), "SOPS_AGE_RECIPIENTS="+strings.Join(keys, ","))
 		sopsCmd.Stderr = os.Stderr
 		if err := sopsCmd.Run(); err != nil {
 			return fmt.Errorf("sops updatekeys failed for %s (%s): %w", envName, env.Secrets, err)
