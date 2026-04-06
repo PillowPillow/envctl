@@ -58,27 +58,27 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 		}
 	}
 
-	// List missing required secrets
-	hasMissing := false
+	// Detail each required secret's status
 	for _, v := range rs.Vars {
-		if classification[v.Name] == template.RequiredSecret && v.Status == resolver.StatusMissing {
-			if !hasMissing {
-				fmt.Fprintf(w, "\n  Missing secrets:\n")
-				hasMissing = true
-			}
-			fmt.Fprintf(w, "    %s %s\n", red("x"), bold(v.Name))
+		if classification[v.Name] != template.RequiredSecret {
+			continue
+		}
+		switch v.Status {
+		case resolver.StatusOK:
+			fmt.Fprintf(w, "    %s %s (%s)\n", green("✓"), v.Name, v.Source)
+		case resolver.StatusDefaulted:
+			fmt.Fprintf(w, "    %s %s (default)\n", green("✓"), v.Name)
+		case resolver.StatusStripped:
+			fmt.Fprintf(w, "    %s %s (stripped)\n", yellow("-"), v.Name)
+		case resolver.StatusMissing:
+			fmt.Fprintf(w, "    %s %s\n", red("✗"), bold(v.Name))
 		}
 	}
 
 	// List unused secrets
-	hasWarnings := false
 	for _, d := range rs.Diagnostics {
 		if d.Severity == resolver.SeverityWarning {
-			if !hasWarnings {
-				fmt.Fprintf(w, "\n  Unused secrets:\n")
-				hasWarnings = true
-			}
-			fmt.Fprintf(w, "    %s %s\n", yellow("!"), d.Variable)
+			fmt.Fprintf(w, "    %s %s (unused)\n", yellow("!"), d.Variable)
 		}
 	}
 
@@ -87,7 +87,7 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 	missingCount := required - resolvedRequired
 
 	switch {
-	case hasMissing || rs.HasErrors():
+	case missingCount > 0 || rs.HasErrors():
 		fmt.Fprintf(w, "%d missing required secret(s)\n", missingCount)
 	case rs.WarningCount() > 0:
 		fmt.Fprintf(w, "%d warning(s)\n", rs.WarningCount())
