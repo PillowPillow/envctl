@@ -69,9 +69,11 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
+            -u "$(id -u):$(id -g)" \
             -e SOPS_AGE_KEY \
             ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
             generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
+          ls -la "${{ inputs.output-path }}"
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
