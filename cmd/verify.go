@@ -48,10 +48,13 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	reporter.PrintVerifyResult(os.Stdout, parsed, rs)
+	result := reporter.PrintVerifyResult(os.Stdout, parsed, rs)
 
+	if result.MissingCount > 0 {
+		return fmt.Errorf("%d missing required secret(s)", result.MissingCount)
+	}
 	if rs.HasErrors() {
-		return fmt.Errorf("%d missing required secret(s)", rs.ErrorCount())
+		return fmt.Errorf("%d error(s)", rs.ErrorCount())
 	}
 
 	return nil

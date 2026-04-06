@@ -17,8 +17,13 @@ var (
 	bold   = color.New(color.Bold).SprintFunc()
 )
 
+// VerifyResult contains the outcome of a verify report.
+type VerifyResult struct {
+	MissingCount int
+}
+
 // PrintVerifyResult outputs the verification result to the writer.
-func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.ResolvedSet) {
+func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.ResolvedSet) VerifyResult {
 	required, optional, static := parsed.Stats()
 	total := len(parsed.Variables)
 
@@ -51,18 +56,19 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 		}
 	}
 
-	// Print diagnostics grouped by severity
-	hasErrors := false
-	for _, d := range rs.Diagnostics {
-		if d.Severity == resolver.SeverityError {
-			if !hasErrors {
+	// List missing required secrets
+	hasMissing := false
+	for _, v := range rs.Vars {
+		if classification[v.Name] == template.RequiredSecret && v.Status == resolver.StatusMissing {
+			if !hasMissing {
 				fmt.Fprintf(w, "\n  Missing secrets:\n")
-				hasErrors = true
+				hasMissing = true
 			}
-			fmt.Fprintf(w, "    %s %s\n", red("x"), bold(d.Variable))
+			fmt.Fprintf(w, "    %s %s\n", red("x"), bold(v.Name))
 		}
 	}
 
+	// List unused secrets
 	hasWarnings := false
 	for _, d := range rs.Diagnostics {
 		if d.Severity == resolver.SeverityWarning {
@@ -76,24 +82,16 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 
 	fmt.Fprintln(w)
 
-	errors := rs.ErrorCount()
-	warnings := rs.WarningCount()
-	if errors == 0 && warnings == 0 {
+	missingCount := required - resolvedRequired
+
+	switch {
+	case hasMissing || rs.HasErrors():
+		fmt.Fprintf(w, "%d missing required secret(s)\n", missingCount)
+	case rs.WarningCount() > 0:
+		fmt.Fprintf(w, "%d warning(s)\n", rs.WarningCount())
+	default:
 		fmt.Fprintf(w, "%s\n", green("All checks passed."))
-	} else {
-		parts := []string{}
-		if errors > 0 {
-			parts = append(parts, fmt.Sprintf("%d error(s)", errors))
-		}
-		if warnings > 0 {
-			parts = append(parts, fmt.Sprintf("%d warning(s)", warnings))
-		}
-		for i, p := range parts {
-			if i > 0 {
-				fmt.Fprintf(w, ", ")
-			}
-			fmt.Fprintf(w, "%s", p)
-		}
-		fmt.Fprintln(w)
 	}
+
+	return VerifyResult{MissingCount: missingCount}
 }
