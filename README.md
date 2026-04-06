@@ -31,7 +31,7 @@ Secrets are stored in SOPS/age-encrypted YAML files committed to the repo. Keys 
 Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated (`gh auth login`).
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | GITHUB_TOKEN=$(gh auth token) bash
+gh api repos/PillowPillow/envctl/contents/scripts/install.sh --jq '.content' | base64 -d | GITHUB_TOKEN=$(gh auth token) bash
 ```
 
 Installs to `~/.envctl/bin/envctl`. Optional environment variables:
@@ -320,7 +320,11 @@ If you can't use Docker, install the binary directly. This requires sops and age
 
 ```yaml
 - name: Install envctl
-  run: curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | INSTALL_DIR=/usr/local/bin bash
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    gh api repos/PillowPillow/envctl/contents/scripts/install.sh --jq '.content' \
+      | base64 -d | GITHUB_TOKEN="${GH_TOKEN}" INSTALL_DIR=/usr/local/bin bash
 
 - name: Install sops & age
   run: |
