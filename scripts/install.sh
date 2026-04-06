@@ -62,7 +62,7 @@ gh_download() {
 
 fetch_latest_version() {
     local version
-    version=$(gh_curl "${API_BASE}/releases/latest" | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4)
+    version=$(gh_curl "${API_BASE}/releases/latest" | grep -o '"tag_name":[[:space:]]*"[^"]*"' | cut -d'"' -f4)
 
     if [ -z "${version}" ]; then
         error "Could not determine latest version. Set ENVCTL_VERSION or check your GITHUB_TOKEN."
@@ -73,9 +73,10 @@ fetch_latest_version() {
 # find_asset_url extracts the API URL for a named asset from a release JSON blob.
 # Usage: find_asset_url <release_json> <asset_name>
 find_asset_url() {
-    # Parse: find the asset entry by name, extract its "url" (API URL) field.
-    echo "$1" | grep -o "\"url\":\"[^\"]*\",\"id\":[0-9]*,\"node_id\":\"[^\"]*\",\"name\":\"$2\"" \
-        | grep -o '"url":"[^"]*"' | head -1 | cut -d'"' -f4
+    # Look for the "name" field matching the asset, then extract the "url" from the
+    # preceding lines (GitHub API returns "url" before "name" in each asset object).
+    echo "$1" | grep -B10 "\"name\": *\"$2\"" | grep '"url"' | head -1 \
+        | sed 's/.*"url": *"\([^"]*\)".*/\1/'
 }
 
 main() {
@@ -125,7 +126,7 @@ main() {
     # Verify SHA256.
     info "Verifying checksum..."
     local expected_hash
-    expected_hash=$(grep "${archive_name}" "${tmpdir}/checksums.txt" | awk '{print $1}')
+    expected_hash=$(grep "  ${archive_name}$" "${tmpdir}/checksums.txt" | awk '{print $1}')
     if [ -z "${expected_hash}" ]; then
         error "Checksum not found for ${archive_name}. Aborting installation."
     fi
