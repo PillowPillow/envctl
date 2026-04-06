@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
@@ -122,6 +123,18 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 	return updateSecretsKeys(cfg)
 }
 
+// writeSopsConfig writes a .sops.yaml file so that sops updatekeys knows
+// which age recipients to apply. This is the only mechanism sops uses to
+// determine the desired recipient list during updatekeys.
+func writeSopsConfig(keys []string, configDir string) (string, error) {
+	path := filepath.Join(configDir, ".sops.yaml")
+	content := fmt.Sprintf("creation_rules:\n  - age: >-\n      %s\n", strings.Join(keys, ","))
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // config file
+		return "", fmt.Errorf("cannot write .sops.yaml: %w", err)
+	}
+	return path, nil
+}
+
 // updateSecretsKeys runs sops updatekeys on all existing encrypted files.
 func updateSecretsKeys(cfg *config.Config) error {
 	keys := cfg.AgeRecipientKeys()
@@ -135,6 +148,13 @@ func updateSecretsKeys(cfg *config.Config) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: brew install sops")
 	}
 
+	// Write .sops.yaml next to .envctl.yaml so sops updatekeys picks it up
+	configDir := filepath.Dir(cfg.ConfigPath())
+	sopsConfigPath, err := writeSopsConfig(keys, configDir)
+	if err != nil {
+		return err
+	}
+
 	updated := 0
 
 	for envName, env := range cfg.Environments {
@@ -143,7 +163,6 @@ func updateSecretsKeys(cfg *config.Config) error {
 		}
 
 		sopsCmd := exec.Command(sopsPath, "updatekeys", "--yes", env.Secrets) //nolint:gosec // sops from LookPath, args from config
-		sopsCmd.Env = append(os.Environ(), "SOPS_AGE_RECIPIENTS="+strings.Join(keys, ","))
 		sopsCmd.Stderr = os.Stderr
 		if err := sopsCmd.Run(); err != nil {
 			return fmt.Errorf("sops updatekeys failed for %s (%s): %w", envName, env.Secrets, err)
@@ -153,7 +172,12 @@ func updateSecretsKeys(cfg *config.Config) error {
 
 	if updated > 0 {
 		fmt.Printf("Updated keys in %d secrets file(s)\n", updated)
-	} else {
+	}
+
+	// Clean up .sops.yaml — envctl owns recipient config via .envctl.yaml
+	os.Remove(sopsConfigPath) //nolint:errcheck,gosec // best-effort cleanup
+
+	if updated == 0 {
 		fmt.Println("No encrypted secrets files found — keys will apply on next edit")
 	}
 
