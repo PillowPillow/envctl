@@ -114,3 +114,72 @@ func TestPrintVerifyResult_MissingWithoutDiagnostics(t *testing.T) {
 
 	_ = strings.Contains(output, "")
 }
+
+func TestPrintVerifyResult_StrippedRequiredSecrets(t *testing.T) {
+	// Reproduces the example-frontend scenario:
+	// RequiredSecret vars (E2E_TEST_USER_EMAIL, E2E_TEST_USER_PASSWORD) are
+	// in the strip list, so they get StatusStripped. They should NOT count
+	// as missing — stripping is intentional exclusion.
+	parsed := &template.ParseResult{
+		Variables: []template.Variable{
+			{Name: "VITE_API_URL", Classification: template.RequiredSecret},
+			{Name: "VITE_AUTH_DOMAIN", Classification: template.RequiredSecret},
+			{Name: "E2E_USER_EMAIL", Classification: template.RequiredSecret},
+			{Name: "E2E_USER_PASS", Classification: template.RequiredSecret},
+			{Name: "APP_NAME", Classification: template.Static, Default: "MyApp"},
+		},
+	}
+
+	rs := &resolver.ResolvedSet{
+		Vars: []resolver.ResolvedVar{
+			{Name: "VITE_API_URL", Value: "https://api.example.com", Source: resolver.SourceSecret, Status: resolver.StatusOK},
+			{Name: "VITE_AUTH_DOMAIN", Value: "auth.example.com", Source: resolver.SourceSecret, Status: resolver.StatusOK},
+			{Name: "E2E_USER_EMAIL", Status: resolver.StatusStripped},
+			{Name: "E2E_USER_PASS", Status: resolver.StatusStripped},
+			{Name: "APP_NAME", Value: "MyApp", Source: resolver.SourceDefault, Status: resolver.StatusOK},
+		},
+	}
+
+	var buf bytes.Buffer
+	result := PrintVerifyResult(&buf, parsed, rs)
+	output := buf.String()
+
+	// Stripped required secrets should count as resolved
+	assert.Contains(t, output, "OK")
+	assert.Contains(t, output, "4/4 required secrets found")
+	assert.Contains(t, output, "All checks passed")
+	assert.NotContains(t, output, "FAIL")
+	assert.NotContains(t, output, "Missing secrets:")
+	assert.Equal(t, 0, result.MissingCount)
+}
+
+func TestPrintVerifyResult_StrippedAndMissing(t *testing.T) {
+	// Mix: some stripped (ok), some genuinely missing (error)
+	parsed := &template.ParseResult{
+		Variables: []template.Variable{
+			{Name: "API_URL", Classification: template.RequiredSecret},
+			{Name: "API_KEY", Classification: template.RequiredSecret},
+			{Name: "E2E_VAR", Classification: template.RequiredSecret},
+		},
+	}
+
+	rs := &resolver.ResolvedSet{
+		Vars: []resolver.ResolvedVar{
+			{Name: "API_URL", Value: "https://api.example.com", Source: resolver.SourceSecret, Status: resolver.StatusOK},
+			{Name: "API_KEY", Source: resolver.SourceEmpty, Status: resolver.StatusMissing},
+			{Name: "E2E_VAR", Status: resolver.StatusStripped},
+		},
+	}
+
+	var buf bytes.Buffer
+	result := PrintVerifyResult(&buf, parsed, rs)
+	output := buf.String()
+
+	assert.Contains(t, output, "FAIL")
+	assert.Contains(t, output, "2/3 required secrets found")
+	assert.Contains(t, output, "Missing secrets:")
+	assert.Contains(t, output, "API_KEY")
+	assert.NotContains(t, output, "E2E_VAR")
+	assert.NotContains(t, output, "All checks passed")
+	assert.Equal(t, 1, result.MissingCount)
+}

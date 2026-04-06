@@ -39,11 +39,13 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 		classification[v.Name] = v.Classification
 	}
 
-	// Count resolved required
+	// Count resolved required (stripped vars are intentionally excluded, not missing)
 	resolvedRequired := 0
 	for _, v := range rs.Vars {
-		if (v.Status == resolver.StatusOK || v.Status == resolver.StatusDefaulted) &&
-			classification[v.Name] == template.RequiredSecret {
+		if classification[v.Name] != template.RequiredSecret {
+			continue
+		}
+		if v.Status == resolver.StatusOK || v.Status == resolver.StatusDefaulted || v.Status == resolver.StatusStripped {
 			resolvedRequired++
 		}
 	}
