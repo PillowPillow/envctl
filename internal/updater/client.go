@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -47,14 +48,26 @@ type asset struct {
 }
 
 // NewGitHubClient creates a GitHub client with default values.
+// Token is resolved from GITHUB_TOKEN env var, falling back to `gh auth token`.
 func NewGitHubClient(httpClient HTTPClient) *GitHubClient {
 	return &GitHubClient{
 		BaseURL: DefaultBaseURL,
 		Owner:   DefaultOwner,
 		Repo:    DefaultRepo,
-		Token:   os.Getenv("GITHUB_TOKEN"),
+		Token:   resolveToken(),
 		HTTP:    httpClient,
 	}
+}
+
+// resolveToken returns a GitHub token from the environment or gh CLI.
+func resolveToken() string {
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		return token
+	}
+	if out, err := exec.Command("gh", "auth", "token").Output(); err == nil {
+		return strings.TrimSpace(string(out))
+	}
+	return ""
 }
 
 // FetchLatestVersion fetches the latest version from GitHub releases.

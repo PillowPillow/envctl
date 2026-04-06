@@ -28,17 +28,13 @@ Secrets are stored in SOPS/age-encrypted YAML files committed to the repo. Keys 
 
 ### Install script
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | GITHUB_TOKEN=ghp_xxx bash
-```
-
-`GITHUB_TOKEN` is required (private repo). Create a Fine-grained PAT with **Contents: Read-only** on `PillowPillow/envctl`, then add it to your shell profile:
+Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated (`gh auth login`).
 
 ```bash
-export GITHUB_TOKEN="ghp_..."  # add to ~/.zshrc
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | GITHUB_TOKEN=$(gh auth token) bash
 ```
 
-Installs to `~/.envctl/bin/envctl`. Other environment variables:
+Installs to `~/.envctl/bin/envctl`. Optional environment variables:
 - `ENVCTL_VERSION` -- pin a specific version (default: latest)
 - `INSTALL_DIR` -- custom install path (default: `~/.envctl/bin`)
 
