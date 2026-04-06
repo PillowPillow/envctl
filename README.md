@@ -26,35 +26,20 @@ Secrets are stored in SOPS/age-encrypted YAML files committed to the repo. Keys 
 
 ## Installation
 
-### Homebrew (macOS/Linux)
-
-```bash
-# One-time setup: configure access to the private tap
-export HOMEBREW_GITHUB_API_TOKEN="ghp_your_token_here"  # add to your ~/.zshrc
-
-brew install pillowpillow/tap/envctl
-```
-
-To create your `HOMEBREW_GITHUB_API_TOKEN`:
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Repositories: select `PillowPillow/homebrew-tap` **and** `PillowPillow/envctl`
-3. Permission: **Contents: Read-only**
-4. Add `export HOMEBREW_GITHUB_API_TOKEN="ghp_..."` to your shell profile (`~/.zshrc` or `~/.bashrc`)
-
-Update:
-```bash
-brew upgrade envctl
-```
-
 ### Install script
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/scripts/install.sh | GITHUB_TOKEN=ghp_xxx bash
 ```
 
-Installs to `~/.envctl/bin/envctl`. Optional environment variables:
+`GITHUB_TOKEN` is required (private repo). Create a Fine-grained PAT with **Contents: Read-only** on `PillowPillow/envctl`, then add it to your shell profile:
+
+```bash
+export GITHUB_TOKEN="ghp_..."  # add to ~/.zshrc
+```
+
+Installs to `~/.envctl/bin/envctl`. Other environment variables:
 - `ENVCTL_VERSION` -- pin a specific version (default: latest)
-- `GITHUB_TOKEN` -- for private repo access
 - `INSTALL_DIR` -- custom install path (default: `~/.envctl/bin`)
 
 ### Self-update
