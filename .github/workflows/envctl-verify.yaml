@@ -9,8 +9,7 @@
 #       with:
 #         environment: production
 #         github-environment: production
-#       secrets:
-#         sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+#       secrets: inherit
 
 name: envctl verify
 
@@ -37,18 +36,14 @@ on:
         type: string
         default: .env
       github-environment:
-        description: "GitHub environment to use for accessing secrets (e.g. production)"
-        required: false
-        type: string
-    secrets:
-      sops-age-key:
-        description: "Age private key for SOPS decryption"
+        description: "GitHub environment for accessing environment-scoped secrets"
         required: true
+        type: string
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.github-environment || '' }}
+    environment: ${{ inputs.github-environment }}
     container:
       image: ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
       credentials:
@@ -59,13 +54,13 @@ jobs:
 
       - name: Verify environment
         env:
-          SOPS_AGE_KEY: ${{ secrets.sops-age-key }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: envctl verify --env ${{ inputs.environment }} --strict
 
       - name: Generate env file
         if: ${{ inputs.generate }}
         env:
-          SOPS_AGE_KEY: ${{ secrets.sops-age-key }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
         run: envctl generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
 
       - name: Upload generated env
