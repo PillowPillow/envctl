@@ -62,6 +62,7 @@ func (p *DotenvParser) Render(result *ParseResult, values map[string]string) str
 			if !ok {
 				continue // omit stripped variables without emitting a blank line
 			}
+			val = dotenvInterpolate(val, values)
 			if !first {
 				sb.WriteByte('\n')
 			}
@@ -108,6 +109,26 @@ func unquote(s string) string {
 		}
 	}
 	return s
+}
+
+// dotenvInterpolate replaces ${VAR} and ${VAR:-default} references inside s
+// with their resolved values from the values map.  If a referenced variable is
+// not in the map, the inline default is used; if there is no default either,
+// the reference is left as-is.
+func dotenvInterpolate(s string, values map[string]string) string {
+	return genericVarPattern.ReplaceAllStringFunc(s, func(match string) string {
+		m := genericVarPattern.FindStringSubmatch(match)
+		if m == nil {
+			return match
+		}
+		if v, ok := values[m[1]]; ok {
+			return v
+		}
+		if m[2] != "" {
+			return m[2]
+		}
+		return match
+	})
 }
 
 // dotenvForceQuote always wraps s in double quotes with proper escaping.

@@ -182,6 +182,77 @@ func TestDotenvQuote(t *testing.T) {
 	}
 }
 
+func TestDotenvParser_Render_Interpolation(t *testing.T) {
+	input := `APP_URL=${APP_URL:-http://localhost}
+SLACK_URL="${APP_URL}/api/v1/integrations/slack/oauth/callback"
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	values := map[string]string{
+		"APP_URL":   "https://myapp.com",
+		"SLACK_URL": "${APP_URL}/api/v1/integrations/slack/oauth/callback",
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, "APP_URL=https://myapp.com")
+	assert.Contains(t, output, `SLACK_URL="https://myapp.com/api/v1/integrations/slack/oauth/callback"`)
+}
+
+func TestDotenvParser_Render_InterpolationMultipleRefs(t *testing.T) {
+	input := `PROTO=${PROTO:-https}
+HOST=${HOST}
+PORT=${PORT:-443}
+URL="${PROTO}://${HOST}:${PORT}"
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	values := map[string]string{
+		"PROTO": "https",
+		"HOST":  "example.com",
+		"PORT":  "8080",
+		"URL":   "${PROTO}://${HOST}:${PORT}",
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, `URL="https://example.com:8080"`)
+}
+
+func TestDotenvParser_Render_InterpolationInlineDefault(t *testing.T) {
+	input := `CALLBACK_URL="${APP_URL:-http://localhost}/callback"
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	// APP_URL not in values → inline default should be used
+	values := map[string]string{
+		"CALLBACK_URL": "${APP_URL:-http://localhost}/callback",
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, `CALLBACK_URL="http://localhost/callback"`)
+}
+
+func TestDotenvParser_Render_InterpolationUnresolved(t *testing.T) {
+	input := `URL="${MISSING_VAR}/path"
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	values := map[string]string{
+		"URL": "${MISSING_VAR}/path",
+	}
+
+	output := parser.Render(result, values)
+	// Unresolved ref left as-is
+	assert.Contains(t, output, `URL="${MISSING_VAR}/path"`)
+}
+
 func TestDotenvParser_Render_SpecialValues(t *testing.T) {
 	input := "APP_NAME=${APP_NAME}\nDB_PASS=${DB_PASS}\n"
 	parser := &DotenvParser{}
