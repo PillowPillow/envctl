@@ -31,6 +31,7 @@ type Variable struct {
 	Default        string // only meaningful for OptionalSecret
 	RawLine        string // original line for output preservation
 	LineNumber     int
+	Quoted         bool // true when the template value was wrapped in quotes
 }
 
 // LineType describes the kind of line in a template file.

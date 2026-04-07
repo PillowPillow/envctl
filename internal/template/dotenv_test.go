@@ -86,9 +86,9 @@ APP_KEY=${APP_KEY}
 
 	output := parser.Render(result, values)
 	assert.Contains(t, output, "# Config")
-	assert.Contains(t, output, `DB_HOST="localhost"`)
-	assert.Contains(t, output, `DB_PASSWORD="secret123"`)
-	assert.Contains(t, output, `APP_KEY="base64:abc"`)
+	assert.Contains(t, output, "DB_HOST=localhost")
+	assert.Contains(t, output, "DB_PASSWORD=secret123")
+	assert.Contains(t, output, "APP_KEY=base64:abc")
 }
 
 func TestDotenvParser_QuotedValues(t *testing.T) {
@@ -102,8 +102,54 @@ VAR3=noquotes
 
 	assert.Len(t, result.Variables, 3)
 	assert.Equal(t, "hello world", result.Variables[0].Default)
+	assert.True(t, result.Variables[0].Quoted)
 	assert.Equal(t, "single quoted", result.Variables[1].Default)
+	assert.True(t, result.Variables[1].Quoted)
 	assert.Equal(t, "noquotes", result.Variables[2].Default)
+	assert.False(t, result.Variables[2].Quoted)
+}
+
+func TestDotenvParser_Render_QuotingPreserved(t *testing.T) {
+	input := `PORT=${PORT:-"3000"}
+HOST=${HOST:-localhost}
+NAME=${NAME:-"my app"}
+DEBUG=${DEBUG:-true}
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	// Use defaults (no overrides)
+	values := map[string]string{
+		"PORT":  "3000",
+		"HOST":  "localhost",
+		"NAME":  "my app",
+		"DEBUG": "true",
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, `PORT="3000"`)    // quoted in template → quoted in output
+	assert.Contains(t, output, "HOST=localhost") // unquoted in template → unquoted
+	assert.Contains(t, output, `NAME="my app"`)  // quoted in template → quoted (also has space)
+	assert.Contains(t, output, "DEBUG=true")     // unquoted in template → unquoted
+}
+
+func TestDotenvParser_Render_QuotedStaticValues(t *testing.T) {
+	input := `PORT="3000"
+HOST=localhost
+`
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	values := map[string]string{
+		"PORT": "3000",
+		"HOST": "localhost",
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, `PORT="3000"`)
+	assert.Contains(t, output, "HOST=localhost")
 }
 
 func TestDotenvQuote(t *testing.T) {
@@ -112,7 +158,7 @@ func TestDotenvQuote(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"simple", "simple", `"simple"`},
+		{"simple", "simple", "simple"},
 		{"with space", "has space", `"has space"`},
 		{"with double quote", `has"quote`, `"has\"quote"`},
 		{"with backslash", `back\slash`, `"back\\slash"`},
@@ -121,7 +167,12 @@ func TestDotenvQuote(t *testing.T) {
 		{"hash char", "hello # comment", `"hello # comment"`},
 		{"dollar sign", "price$5", `"price$5"`},
 		{"single quote", "hello'world", `"hello'world"`},
-		{"numeric", "3000", `"3000"`},
+		{"numeric", "3000", "3000"},
+		{"boolean true", "true", "true"},
+		{"boolean false", "false", "false"},
+		{"hostname", "localhost", "localhost"},
+		{"url no spaces", "http://localhost:3000", "http://localhost:3000"},
+		{"with tab", "has\ttab", `"has	tab"`},
 	}
 
 	for _, tt := range tests {
