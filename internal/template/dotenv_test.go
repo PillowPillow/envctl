@@ -86,9 +86,9 @@ APP_KEY=${APP_KEY}
 
 	output := parser.Render(result, values)
 	assert.Contains(t, output, "# Config")
-	assert.Contains(t, output, "DB_HOST=localhost")
-	assert.Contains(t, output, "DB_PASSWORD=secret123")
-	assert.Contains(t, output, "APP_KEY=base64:abc")
+	assert.Contains(t, output, `DB_HOST="localhost"`)
+	assert.Contains(t, output, `DB_PASSWORD="secret123"`)
+	assert.Contains(t, output, `APP_KEY="base64:abc"`)
 }
 
 func TestDotenvParser_QuotedValues(t *testing.T) {
@@ -104,4 +104,45 @@ VAR3=noquotes
 	assert.Equal(t, "hello world", result.Variables[0].Default)
 	assert.Equal(t, "single quoted", result.Variables[1].Default)
 	assert.Equal(t, "noquotes", result.Variables[2].Default)
+}
+
+func TestDotenvQuote(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"simple", "simple", `"simple"`},
+		{"with space", "has space", `"has space"`},
+		{"with double quote", `has"quote`, `"has\"quote"`},
+		{"with backslash", `back\slash`, `"back\\slash"`},
+		{"empty", "", `""`},
+		{"mixed special", `a"b\c`, `"a\"b\\c"`},
+		{"hash char", "hello # comment", `"hello # comment"`},
+		{"dollar sign", "price$5", `"price$5"`},
+		{"single quote", "hello'world", `"hello'world"`},
+		{"numeric", "3000", `"3000"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, dotenvQuote(tt.input))
+		})
+	}
+}
+
+func TestDotenvParser_Render_SpecialValues(t *testing.T) {
+	input := "APP_NAME=${APP_NAME}\nDB_PASS=${DB_PASS}\n"
+	parser := &DotenvParser{}
+	result, err := parser.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+
+	values := map[string]string{
+		"APP_NAME": "My App",
+		"DB_PASS":  `p@ss"word`,
+	}
+
+	output := parser.Render(result, values)
+	assert.Contains(t, output, `APP_NAME="My App"`)
+	assert.Contains(t, output, `DB_PASS="p@ss\"word"`)
 }

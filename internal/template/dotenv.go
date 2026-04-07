@@ -68,7 +68,7 @@ func (p *DotenvParser) Render(result *ParseResult, values map[string]string) str
 			first = false
 			sb.WriteString(line.Variable.Name)
 			sb.WriteByte('=')
-			sb.WriteString(val)
+			sb.WriteString(dotenvQuote(val))
 		} else {
 			if !first {
 				sb.WriteByte('\n')
@@ -102,6 +102,26 @@ func unquote(s string) string {
 		}
 	}
 	return s
+}
+
+// dotenvQuote wraps a value in double quotes, escaping inner backslashes and
+// double-quote characters.
+func dotenvQuote(s string) string {
+	var sb strings.Builder
+	sb.Grow(len(s) + 2)
+	sb.WriteByte('"')
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			sb.WriteString(`\\`)
+		case '"':
+			sb.WriteString(`\"`)
+		default:
+			sb.WriteByte(s[i])
+		}
+	}
+	sb.WriteByte('"')
+	return sb.String()
 }
 
 func classifyVariable(name, value, rawLine string, lineNum int) Variable {
