@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // SOPSProvider decrypts SOPS-encrypted YAML files by shelling out to the sops CLI.

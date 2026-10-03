@@ -1,6 +1,6 @@
-FROM alpine:3.21
+FROM alpine:3.24
 
-ARG SOPS_VERSION=3.9.4
+ARG SOPS_VERSION=3.13.3
 ARG TARGETARCH
 
 # Install age + certs
