@@ -109,10 +109,16 @@ func TestKeysAdd_DuplicateAcrossScopes(t *testing.T) {
 	require.NoError(t, err)
 	afterFirst := readFile(t, p.ConfigPath)
 
-	_, _, err = runCLI(t, "--env", "production", "keys", "add", "dev", devPub)
+	_, _, err = runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.ErrorContains(t, err, `recipient "dev" already exists in scope "local"`)
+
+	_, _, err = runCLI(t, "keys", "add", "dev", devPub)
 	require.ErrorContains(t, err, `recipient "dev" already exists in scope "local"`)
 
 	_, _, err = runCLI(t, "keys", "add", "ci", devPub)
+	require.ErrorContains(t, err, `recipient "ci" already exists in scope "global"`)
+
+	_, _, err = runCLI(t, "--env", "production", "keys", "add", "ci", devPub)
 	require.ErrorContains(t, err, `recipient "ci" already exists in scope "global"`)
 
 	assert.Equal(t, afterFirst, readFile(t, p.ConfigPath))
@@ -199,6 +205,23 @@ func TestKeysRemove_NotFound(t *testing.T) {
 	require.ErrorContains(t, err, `recipient "ghost" not found in scope "local"`)
 
 	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
+}
+
+func TestKeysRemove_GlobalNotFoundHintsEnvironments(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	dev2Pub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "--env", "production", "keys", "add", "dev", dev2Pub)
+	require.NoError(t, err)
+	configBefore := readFile(t, p.ConfigPath)
+
+	_, _, err = runCLI(t, "keys", "remove", "dev")
+	require.ErrorContains(t, err, `recipient "dev" not found in scope "global" (it exists in: local, production — use --env)`)
+
+	assert.Equal(t, configBefore, readFile(t, p.ConfigPath))
 }
 
 func TestKeysList_Scopes(t *testing.T) {
@@ -314,4 +337,33 @@ func TestKeysAdd_ReservedName(t *testing.T) {
 	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
 	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
 	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+}
+
+func TestKeysAdd_SameNameInTwoEnvs(t *testing.T) {
+	p := setupProject(t)
+	localDev, _ := sopstest.NewKey(t)
+	prodDev, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", localDev)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "--env", "production", "keys", "add", "dev", prodDev)
+	require.NoError(t, err)
+
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, localDev), fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, prodDev), fileRecipients(t, p.ProdSecrets))
+
+	stdout, _, err := runCLI(t, "keys", "list")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "dev      "+localDev+"  local")
+	assert.Contains(t, stdout, "dev      "+prodDev+"  production")
+
+	_, _, err = runCLI(t, "--env", "local", "keys", "remove", "dev")
+	require.NoError(t, err)
+
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub), fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, prodDev), fileRecipients(t, p.ProdSecrets))
+	stdout, _, err = runCLI(t, "keys", "list")
+	require.NoError(t, err)
+	assert.NotContains(t, stdout, localDev)
+	assert.Contains(t, stdout, "dev      "+prodDev+"  production")
 }

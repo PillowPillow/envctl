@@ -98,8 +98,9 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	scope := scopeOf(envName)
 	for _, r := range all {
-		if r.Name == name {
+		if r.Name == name && (scope == config.ScopeGlobal || r.Scope == config.ScopeGlobal || r.Scope == scope) {
 			return fmt.Errorf("recipient %q already exists in scope %q", name, r.Scope)
 		}
 	}
@@ -116,7 +117,7 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	added := config.Recipient{Name: name, Key: key, Scope: scopeOf(envName)}
+	added := config.Recipient{Name: name, Key: key, Scope: scope}
 	if err := checkRecipients(newCfg, append(all, added)); err != nil {
 		return err
 	}
@@ -147,24 +148,28 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var inScope []string
+	var inScope, otherEnvs []string
 	var kept []config.Recipient
 	found := false
 	for _, r := range all {
+		switch {
+		case r.Scope == scope:
+			inScope = append(inScope, r.Name)
+		case r.Name == name && r.Scope == config.ScopeGlobal:
+			return fmt.Errorf("recipient %q is global; remove it without --env (it cannot be removed from a single environment)", name)
+		case r.Name == name:
+			otherEnvs = append(otherEnvs, r.Scope)
+		}
 		if r.Scope == scope && r.Name == name {
 			found = true
-		} else {
-			kept = append(kept, r)
-		}
-		if r.Scope != scope {
-			if r.Name == name && r.Scope == config.ScopeGlobal {
-				return fmt.Errorf("recipient %q is global; remove it without --env (it cannot be removed from a single environment)", name)
-			}
 			continue
 		}
-		inScope = append(inScope, r.Name)
+		kept = append(kept, r)
 	}
 	if !found {
+		if scope == config.ScopeGlobal && len(otherEnvs) > 0 {
+			return fmt.Errorf("recipient %q not found in scope %q (it exists in: %s — use --env)", name, scope, strings.Join(otherEnvs, ", "))
+		}
 		return fmt.Errorf("recipient %q not found in scope %q (available: %v)", name, scope, inScope)
 	}
 

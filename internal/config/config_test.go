@@ -226,3 +226,14 @@ func TestSecretsRecipientKeys_UnionOfEnvironmentsSharingAFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
 }
+
+func TestLoad_SameRecipientNameInTwoEnvs(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "    secrets: .envctl/production.enc.yaml\n",
+		"    secrets: .envctl/production.enc.yaml\n    age_recipients:\n      dev: age1proddev\n", 1)
+	cfg := parseConfig(t, content)
+
+	recipients, err := cfg.Recipients("")
+	require.NoError(t, err)
+	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age1dev", Scope: "local"})
+	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age1proddev", Scope: "production"})
+}
