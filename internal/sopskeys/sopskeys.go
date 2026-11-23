@@ -22,10 +22,10 @@ func Sync(sopsPath, file string, recipients []string) error {
 	}
 	defer cleanup()
 
-	if err := runSops(sopsPath, "--config", cfg, "rotate", "-i", file); err != nil {
+	if err := runSops(sopsPath, "--config", cfg, "rotate", "-i", "--", file); err != nil {
 		return fmt.Errorf("sops rotate failed for %s: %w", file, err)
 	}
-	if err := runSops(sopsPath, "--config", cfg, "updatekeys", "--yes", file); err != nil {
+	if err := runSops(sopsPath, "--config", cfg, "updatekeys", "--yes", "--", file); err != nil {
 		return fmt.Errorf("sops updatekeys failed for %s: %w", file, err)
 	}
 	return nil
@@ -38,7 +38,7 @@ func Encrypt(sopsPath, file string, recipients []string) error {
 	}
 	defer cleanup()
 
-	if err := runSops(sopsPath, "--config", cfg, "--encrypt", "--in-place", "--age", strings.Join(recipients, ","), file); err != nil {
+	if err := runSops(sopsPath, "--config", cfg, "--encrypt", "--in-place", "--age", strings.Join(recipients, ","), "--", file); err != nil {
 		return fmt.Errorf("sops encrypt failed for %s: %w", file, err)
 	}
 	return nil

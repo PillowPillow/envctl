@@ -160,6 +160,23 @@ func TestCanDecrypt(t *testing.T) {
 	assert.Error(t, CanDecrypt(sopsBin(t), file))
 }
 
+func TestEncryptAndSync_FileNameStartingWithDash(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, aKey := sopstest.NewKey(t)
+	b, _ := sopstest.NewKey(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("SOPS_AGE_KEY_FILE", aKey)
+	const file = "-dash.enc.yaml"
+	require.NoError(t, os.WriteFile(file, []byte("FOO: bar\n"), 0o600))
+
+	require.NoError(t, Encrypt(sopsBin(t), file, []string{a}))
+	require.NoError(t, Sync(sopsBin(t), file, []string{a, b}))
+
+	got, err := FileRecipients(file)
+	require.NoError(t, err)
+	assert.Equal(t, sorted(a, b), got)
+}
+
 func TestCanDecrypt_IgnoresMalformedRepoSopsYaml(t *testing.T) {
 	sopstest.RequireTools(t)
 	a, aKey := sopstest.NewKey(t)
