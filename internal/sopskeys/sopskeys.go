@@ -59,6 +59,28 @@ func CanDecrypt(sopsPath, file string) error {
 	return nil
 }
 
+// The sops metadata is not covered by the MAC, and rotate sends the new data key to every source it lists (hc_vault in plaintext over HTTP).
+func ForeignKeySources(file string) ([]string, error) {
+	data, err := os.ReadFile(file) //nolint:gosec // path from caller
+	if err != nil {
+		return nil, err
+	}
+	var doc struct {
+		Sops map[string]any `yaml:"sops"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", file, err)
+	}
+	var out []string
+	for name, value := range doc.Sops {
+		if list, ok := value.([]any); ok && len(list) > 0 && name != "age" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func FileRecipients(file string) ([]string, error) {
 	data, err := os.ReadFile(file) //nolint:gosec // path from caller
 	if err != nil {

@@ -515,3 +515,34 @@ func TestKeysRemove_NoSameKeyWarningWhenRevoked(t *testing.T) {
 
 	assert.NotContains(t, stderr, "another recipient has the same key")
 }
+
+func injectVaultKeySource(t *testing.T, file string) {
+	t.Helper()
+	tampered := strings.Replace(string(readFile(t, file)), "\nsops:\n",
+		"\nsops:\n    hc_vault:\n        - vault_address: http://127.0.0.1:1\n          engine_path: transit\n          key_name: k\n          created_at: \"2026-11-23T00:00:00Z\"\n          enc: vault:v1:ZmFrZQ==\n", 1)
+	require.NoError(t, os.WriteFile(file, []byte(tampered), 0o600))
+}
+
+func TestKeys_RefusesFileWithForeignKeySource(t *testing.T) {
+	for _, args := range [][]string{
+		{"keys", "add", "eve", ""},
+		{"keys", "remove", "nicolas"},
+	} {
+		t.Run(args[1], func(t *testing.T) {
+			p := setupProject(t)
+			injectVaultKeySource(t, p.ProdSecrets)
+			localBefore, prodBefore := readFile(t, p.LocalSecrets), readFile(t, p.ProdSecrets)
+			if args[1] == "add" {
+				args[3], _ = sopstest.NewKey(t)
+			}
+
+			_, _, err := runCLI(t, args...)
+			require.ErrorContains(t, err, "key sources other than age")
+
+			assert.ErrorContains(t, err, p.ProdSecrets+": hc_vault")
+			assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
+			assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+			assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
+		})
+	}
+}

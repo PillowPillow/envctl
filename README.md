@@ -426,6 +426,7 @@ envctl refuses a removal that would leave an environment whose secrets file exis
 - Every `keys add` and `keys remove` rotates the data key of each affected file, so **the whole file changes in git**, not only the recipient block. Expect a full diff on review.
 - Rotation does not rewrite git history. A removed key can still decrypt older versions of the files from history, and `keys remove` prints a warning saying so. To fully revoke access, also change the secret values themselves.
 - Before changing anything, `keys add|remove` checks that your age key can decrypt every targeted secrets file. If one cannot be decrypted, the command lists it and changes nothing: run it as a recipient of every targeted file (for a global change, someone who holds every environment's key).
+- `keys add|remove` only manages files whose sops metadata lists age recipients alone. A file that also lists another key source (`hc_vault`, `kms`, `gcp_kms`, `azure_kv`, `pgp`, `key_groups`…) is refused before anything changes, because rotating it would hand the new data key to that source. Remove the extra source with sops, then re-run.
 - If re-keying still fails part-way, `.envctl.yaml` is left untouched and the error lists the files already re-keyed. Fix the cause and re-run the same command: a file you can no longer decrypt (because you removed your own key) and that already has the expected recipients is reported as already up to date and skipped. Every file you can decrypt is rotated again.
 
 ## Upgrading from v1

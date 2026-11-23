@@ -160,6 +160,26 @@ func TestCanDecrypt(t *testing.T) {
 	assert.Error(t, CanDecrypt(sopsBin(t), file))
 }
 
+func TestForeignKeySources(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, _ := sopstest.NewKey(t)
+	file := encryptedFile(t, a)
+
+	got, err := ForeignKeySources(file)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	data, err := os.ReadFile(file) //nolint:gosec // test file
+	require.NoError(t, err)
+	tampered := strings.Replace(string(data), "\nsops:\n",
+		"\nsops:\n    hc_vault:\n        - vault_address: http://127.0.0.1:1\n          key_name: k\n    key_groups:\n        - age:\n            - recipient: "+a+"\n", 1)
+	require.NoError(t, os.WriteFile(file, []byte(tampered), 0o600)) //nolint:gosec // test file
+
+	got, err = ForeignKeySources(file)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"hc_vault", "key_groups"}, got)
+}
+
 func TestIsolatedConfig_KeepsRecipientsVerbatim(t *testing.T) {
 	recipients := []string{"age1a #not-a-comment", "age1b: x"}
 	path, cleanup, err := isolatedConfig(recipients)

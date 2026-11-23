@@ -279,10 +279,18 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: brew install sops")
 	}
 
-	var pending, undecryptable []string
+	var pending, undecryptable, foreign []string
 	upToDate := 0
 	for _, file := range keysTargetFiles(newCfg) {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
+			continue
+		}
+		sources, err := sopskeys.ForeignKeySources(file)
+		if err != nil {
+			return fmt.Errorf("%w; nothing was changed", err)
+		}
+		if len(sources) > 0 {
+			foreign = append(foreign, fmt.Sprintf("  %s: %s", file, strings.Join(sources, ", ")))
 			continue
 		}
 		decryptErr := sopskeys.CanDecrypt(sopsPath, file)
@@ -297,6 +305,9 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 			continue
 		}
 		undecryptable = append(undecryptable, fmt.Sprintf("  %s: %v", file, decryptErr))
+	}
+	if len(foreign) > 0 {
+		return fmt.Errorf("refusing to re-key: these secrets files list key sources other than age, which would receive the new data key; nothing was changed — remove them from the file's sops metadata and re-run:\n%s", strings.Join(foreign, "\n"))
 	}
 	if len(undecryptable) > 0 {
 		return fmt.Errorf("cannot decrypt these secrets files with your age key; nothing was changed — run this command as a recipient of every targeted file:\n%s", strings.Join(undecryptable, "\n"))
