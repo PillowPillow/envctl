@@ -193,3 +193,37 @@ func TestAddRecipient_EmptyValueOnNextLine(t *testing.T) {
 		})
 	}
 }
+
+func TestAddRecipient_GlobalEmptySops(t *testing.T) {
+	base := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: .envctl/secrets.local.enc.yaml\n"
+	for _, sops := range []string{"sops:\n", "sops: {}\n", "sops: ~\n"} {
+		t.Run(sops, func(t *testing.T) {
+			out, err := AddRecipient([]byte(base+sops), "", "dev", "age1dev")
+			require.NoError(t, err)
+			assert.Equal(t, base+"sops:\n  age_recipients:\n    dev: age1dev\n", string(out))
+		})
+	}
+}
+
+func TestAddRecipient_Env_TrailingMultilineFlowSequence(t *testing.T) {
+	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n    strip: [\n      A,\n    ]\nsops:\n  age_recipients: {}\n"
+
+	out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+	require.NoError(t, err)
+
+	cfg, err := Parse(out, ".envctl.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "age1dev", cfg.Environments["local"].AgeRecipients["dev"])
+	assert.Equal(t, []string{"A"}, cfg.Environments["local"].Strip)
+}
+
+func TestAddRecipient_GlobalMissingSopsBeforeDocumentEnd(t *testing.T) {
+	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n...\n"
+
+	out, err := AddRecipient([]byte(src), "", "dev", "age1dev")
+	require.NoError(t, err)
+
+	cfg, err := Parse(out, ".envctl.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, "age1dev", cfg.SOPS.AgeRecipients["dev"])
+}

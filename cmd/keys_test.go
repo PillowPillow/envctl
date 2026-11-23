@@ -489,3 +489,29 @@ func TestKeysAdd_ConfigSymlinkStaysALink(t *testing.T) {
 	assert.NotZero(t, info.Mode()&os.ModeSymlink)
 	assert.Contains(t, string(readFile(t, real)), "dev: "+devPub)
 }
+
+func TestKeysRemove_WarnsWhenSameKeyKeepsAccess(t *testing.T) {
+	p := setupProject(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "ci-alias", p.CI.Pub)
+	require.NoError(t, err)
+
+	_, stderr, err := runCLI(t, "--env", "local", "keys", "remove", "ci-alias")
+	require.NoError(t, err)
+
+	assert.Contains(t, stderr, "another recipient has the same key")
+	assert.Contains(t, fileRecipients(t, p.LocalSecrets), p.CI.Pub)
+}
+
+func TestKeysRemove_NoSameKeyWarningWhenRevoked(t *testing.T) {
+	setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+
+	_, stderr, err := runCLI(t, "--env", "local", "keys", "remove", "dev")
+	require.NoError(t, err)
+
+	assert.NotContains(t, stderr, "another recipient has the same key")
+}

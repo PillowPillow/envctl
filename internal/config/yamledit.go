@@ -22,16 +22,27 @@ func AddRecipient(src []byte, envName, name, key string) ([]byte, error) {
 	if n := len(d.lines); n > 0 && !strings.HasSuffix(d.lines[n-1], "\n") {
 		d.lines[n-1] += d.eol
 	}
+	step := d.indentStep()
+	entry := func(indent int) string { return spaces(indent) + name + ": " + key + d.eol }
+
+	if envName == "" {
+		if sk, sv := mapValue(d.root, "sops"); sk != nil && isEmptyValue(sv) {
+			if err := d.dropValue(sk, sv); err != nil {
+				return nil, err
+			}
+			indent := sk.Column - 1
+			d.insert(sk.Line, spaces(indent+step)+ageRecipientsKey+":"+d.eol, entry(indent+2*step))
+			return d.bytes(), nil
+		}
+	}
 	parent, err := d.scope(envName)
 	if err != nil {
 		return nil, err
 	}
-	step := d.indentStep()
-	entry := func(indent int) string { return spaces(indent) + name + ": " + key + d.eol }
 
 	if parent == nil {
 		indent := d.root.Content[0].Column - 1
-		d.insert(len(d.lines), spaces(indent)+"sops:"+d.eol, spaces(indent+step)+ageRecipientsKey+":"+d.eol, entry(indent+2*step))
+		d.insert(d.end(d.root, indent), spaces(indent)+"sops:"+d.eol, spaces(indent+step)+ageRecipientsKey+":"+d.eol, entry(indent+2*step))
 		return d.bytes(), nil
 	}
 
@@ -177,7 +188,8 @@ func (d *lineDoc) end(n *yaml.Node, indent int) int {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		if leadingSpaces(d.lines[j]) <= indent {
+		// A flow collection may close at or left of its key's indent.
+		if leadingSpaces(d.lines[j]) <= indent && trimmed[0] != ']' && trimmed[0] != '}' {
 			break
 		}
 		i = j + 1

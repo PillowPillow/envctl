@@ -152,6 +152,7 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 	}
 	var inScope, otherEnvs []string
 	var kept []config.Recipient
+	var removedKey string
 	found := false
 	for _, r := range all {
 		switch {
@@ -164,6 +165,7 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		}
 		if r.Scope == scope && r.Name == name {
 			found = true
+			removedKey = r.Key
 			continue
 		}
 		kept = append(kept, r)
@@ -204,8 +206,21 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Printf("Removed recipient %q\n", name)
+	if files := filesStillOpenTo(newCfg, removedKey); len(files) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: another recipient has the same key, so it can still decrypt: %s\n", strings.Join(files, ", "))
+	}
 	fmt.Fprintln(os.Stderr, "Warning: the removed key can still decrypt older versions of these files from git history. Rotate the secret values themselves to fully revoke access.")
 	return nil
+}
+
+func filesStillOpenTo(cfg *config.Config, key string) []string {
+	var out []string
+	for _, file := range keysTargetFiles(cfg) {
+		if slices.Contains(cfg.SecretsRecipientKeys(file), key) {
+			out = append(out, file)
+		}
+	}
+	return out
 }
 
 func scopeOf(env string) string {
@@ -296,7 +311,7 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	}
 
 	if err := writeFileAtomic(cfg.ConfigPath(), newBytes); err != nil {
-		return fmt.Errorf("cannot write config %s: %w", cfg.ConfigPath(), err)
+		return fmt.Errorf("re-keyed %s but cannot write config %s — fix the error and re-run the same command: %w", doneList(done), cfg.ConfigPath(), err)
 	}
 
 	switch {
