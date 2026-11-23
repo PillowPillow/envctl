@@ -12,6 +12,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// Rotate runs before updatekeys so an operator can remove their own key: updatekeys first would leave rotate unable to decrypt.
 func Sync(sopsPath, file string, recipients []string) error {
 	cfg, cleanup, err := isolatedConfig(recipients)
 	if err != nil {
@@ -19,11 +20,11 @@ func Sync(sopsPath, file string, recipients []string) error {
 	}
 	defer cleanup()
 
-	if err := runSops(sopsPath, "--config", cfg, "updatekeys", "--yes", file); err != nil {
-		return fmt.Errorf("sops updatekeys failed for %s: %w", file, err)
-	}
 	if err := runSops(sopsPath, "--config", cfg, "rotate", "-i", file); err != nil {
 		return fmt.Errorf("sops rotate failed for %s: %w", file, err)
+	}
+	if err := runSops(sopsPath, "--config", cfg, "updatekeys", "--yes", file); err != nil {
+		return fmt.Errorf("sops updatekeys failed for %s: %w", file, err)
 	}
 	return nil
 }

@@ -75,8 +75,13 @@ func TestKeysAdd_FromSubdirectory(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, devPub), fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub), fileRecipients(t, p.ProdSecrets))
 	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
-	assert.Contains(t, string(readFile(t, p.ConfigPath)), "dev: "+devPub)
+
+	want := strings.Replace(string(p.OriginalConfig),
+		"    output: .env\n",
+		"    output: .env\n    age_recipients:\n      dev: "+devPub+"\n", 1)
+	assert.Equal(t, want, string(readFile(t, p.ConfigPath)))
 
 	entries, err := os.ReadDir(sub)
 	require.NoError(t, err)
@@ -159,19 +164,41 @@ func TestKeysRemove_GlobalWithEnv(t *testing.T) {
 
 func TestKeysRemove_LastRecipient(t *testing.T) {
 	p := setupProject(t)
-	localBefore := readFile(t, p.LocalSecrets)
-	t.Setenv("SOPS_AGE_KEY_FILE", p.Nicolas.KeyFile)
 
-	_, _, err := runCLI(t, "keys", "remove", "ci")
+	_, _, err := runCLI(t, "keys", "remove", "nicolas")
 	require.NoError(t, err)
 	configBefore := readFile(t, p.ConfigPath)
+	localBefore, prodBefore := readFile(t, p.LocalSecrets), readFile(t, p.ProdSecrets)
 
-	_, _, err = runCLI(t, "keys", "remove", "nicolas")
+	_, _, err = runCLI(t, "keys", "remove", "ci")
 	require.ErrorContains(t, err, "would have no recipients left")
 
 	assert.Equal(t, configBefore, readFile(t, p.ConfigPath))
+	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
+	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+}
+
+func TestKeysRemove_OwnKey(t *testing.T) {
+	p := setupProject(t)
+
+	_, _, err := runCLI(t, "keys", "remove", "ci")
+	require.NoError(t, err)
+
+	assert.NotContains(t, string(readFile(t, p.ConfigPath)), "ci:")
 	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
-	assert.NotEqual(t, localBefore, readFile(t, p.LocalSecrets))
+	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.ProdSecrets))
+}
+
+func TestKeysRemove_NotFound(t *testing.T) {
+	p := setupProject(t)
+
+	_, _, err := runCLI(t, "keys", "remove", "ghost")
+	require.ErrorContains(t, err, `recipient "ghost" not found in scope "global"`)
+
+	_, _, err = runCLI(t, "--env", "local", "keys", "remove", "ghost")
+	require.ErrorContains(t, err, `recipient "ghost" not found in scope "local"`)
+
+	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
 }
 
 func TestKeysList_Scopes(t *testing.T) {

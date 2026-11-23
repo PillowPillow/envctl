@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 
@@ -33,10 +34,19 @@ type project struct {
 func resetFlags() {
 	cfgFile = ""
 	envName = ""
-	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+	var walk func(c *cobra.Command)
+	reset := func(f *pflag.Flag) {
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
-	})
+	}
+	walk = func(c *cobra.Command) {
+		c.Flags().VisitAll(reset)
+		c.PersistentFlags().VisitAll(reset)
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(rootCmd)
 }
 
 func runCLI(t *testing.T, args ...string) (stdout, stderr string, err error) {

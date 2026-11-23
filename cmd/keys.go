@@ -212,7 +212,7 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 			return err
 		}
 		if err := sopskeys.Sync(sopsPath, file, keys); err != nil {
-			return fmt.Errorf("re-keyed %s before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), err)
+			return fmt.Errorf("re-keyed %s (and possibly %s) before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), file, err)
 		}
 		done = append(done, file)
 	}

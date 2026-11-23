@@ -92,6 +92,25 @@ func TestSync_RemoveRevokesFutureAccess(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestSync_RemovesOperatorsOwnKey(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, aKey := sopstest.NewKey(t)
+	b, bKey := sopstest.NewKey(t)
+	file := encryptedFile(t, a, b)
+	t.Setenv("SOPS_AGE_KEY_FILE", aKey)
+
+	require.NoError(t, Sync(sopsBin(t), file, []string{b}))
+
+	got, err := FileRecipients(file)
+	require.NoError(t, err)
+	assert.Equal(t, []string{b}, got)
+	_, err = decrypt(t, file, aKey)
+	assert.Error(t, err)
+	out, err := decrypt(t, file, bKey)
+	require.NoError(t, err)
+	assert.Contains(t, out, "bar")
+}
+
 func TestSync_IgnoresRepoSopsYaml(t *testing.T) {
 	sopstest.RequireTools(t)
 	a, aKey := sopstest.NewKey(t)
