@@ -1,6 +1,6 @@
 FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
-# Bump SOPS_VERSION together with both checksums (sops-v<version>.checksums.txt) and the sops install in .github/workflows/ci.yaml.
+# Bump SOPS_VERSION together with both checksums (sops-v<version>.checksums.txt) and the sops installs in .github/workflows/ci.yaml and release.yaml.
 ARG SOPS_VERSION=3.13.3
 ARG SOPS_SHA256_AMD64=e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
 ARG SOPS_SHA256_ARM64=53b0abacd38ef1b12a66d6c100956691b9cefce018d91f81e73ddf7438b94d77
