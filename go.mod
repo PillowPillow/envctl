@@ -1,6 +1,6 @@
 module github.com/PillowPillow/envctl/v2
 
-go 1.27.1
+go 1.27.4
 
 require (
 	github.com/fatih/color v1.19.0
