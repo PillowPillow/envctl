@@ -265,6 +265,29 @@ func TestSecretsRecipientKeys_SymlinkedSharedFile(t *testing.T) {
 	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["e2e"].Secrets))
 }
 
+func TestSecretsRecipientKeys_SymlinkedSharedFileNotCreatedYet(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n",
+		"  e2e:\n    secrets: .envctl/e2e.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n  production:\n", 1)
+	path := filepath.Join(t.TempDir(), ".envctl.yaml")
+	cfg, err := Parse([]byte(content), path)
+	require.NoError(t, err)
+	envctlDir := filepath.Join(filepath.Dir(path), ".envctl")
+	require.NoError(t, os.MkdirAll(envctlDir, 0o755))
+	require.NoError(t, os.Symlink("local.enc.yaml", filepath.Join(envctlDir, "e2e.enc.yaml")))
+
+	want := []string{"age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", "age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr"}
+	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["e2e"].Secrets))
+	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["local"].Secrets))
+}
+
+func TestCanonicalPath_SymlinkCycleTerminates(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Symlink("b", filepath.Join(dir, "a")))
+	require.NoError(t, os.Symlink("a", filepath.Join(dir, "b")))
+
+	assert.NotEmpty(t, CanonicalPath(filepath.Join(dir, "a")))
+}
+
 func TestLoad_SameRecipientNameInTwoEnvs(t *testing.T) {
 	content := strings.Replace(perEnvConfig, "    secrets: .envctl/production.enc.yaml\n",
 		"    secrets: .envctl/production.enc.yaml\n    age_recipients:\n      dev: age16qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqhn87p5\n", 1)

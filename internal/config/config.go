@@ -138,13 +138,30 @@ func (c *Config) SecretsRecipientKeys(file string) []string {
 	return keys
 }
 
-// CanonicalPath resolves symlinks when path exists, so two spellings of one secrets file compare equal.
+// CanonicalPath resolves symlinks, also when the file does not exist yet, so two spellings of one secrets file compare equal.
 func CanonicalPath(path string) string {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved
+	clean := filepath.Clean(path)
+	for range maxSymlinkHops {
+		if resolved, err := filepath.EvalSymlinks(clean); err == nil {
+			return resolved
+		}
+		dir := filepath.Dir(clean)
+		if realDir, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = realDir
+		}
+		target, err := os.Readlink(clean)
+		if err != nil {
+			return filepath.Join(dir, filepath.Base(clean))
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(dir, target)
+		}
+		clean = filepath.Clean(target)
 	}
-	return filepath.Clean(path)
+	return clean
 }
+
+const maxSymlinkHops = 255
 
 func scopedRecipients(out []Recipient, scope string, m map[string]string) []Recipient {
 	names := make([]string, 0, len(m))
