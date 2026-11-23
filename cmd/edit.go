@@ -43,10 +43,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	if _, err := os.Stat(env.Secrets); os.IsNotExist(err) {
-		recipients, err := cfg.EffectiveRecipientKeys(envName)
-		if err != nil {
-			return err
-		}
+		recipients := cfg.SecretsRecipientKeys(env.Secrets)
 		if len(recipients) == 0 {
 			return fmt.Errorf("no age recipients for environment %q — add one with: envctl keys add <name> <age1...>", envName)
 		}

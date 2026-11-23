@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -170,11 +172,7 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 	for _, target := range keysTargets(newCfg) {
-		keys, err := newCfg.EffectiveRecipientKeys(target)
-		if err != nil {
-			return err
-		}
-		if len(keys) == 0 {
+		if len(newCfg.SecretsRecipientKeys(newCfg.Environments[target].Secrets)) == 0 {
 			return fmt.Errorf("cannot remove %q: environment %q would have no recipients left", name, target)
 		}
 	}
@@ -194,7 +192,21 @@ func keysTargets(cfg *config.Config) []string {
 	return cfg.EnvNames()
 }
 
-// syncAndSave re-keys every targeted secrets file, then writes .envctl.yaml last so a failure leaves it untouched.
+func keysTargetFiles(cfg *config.Config) []string {
+	seen := map[string]bool{}
+	var files []string
+	for _, target := range keysTargets(cfg) {
+		file := filepath.Clean(cfg.Environments[target].Secrets)
+		if !seen[file] {
+			seen[file] = true
+			files = append(files, file)
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
+// syncAndSave re-keys every targeted secrets file for all environments sharing it, then writes .envctl.yaml last so a failure leaves it untouched.
 func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	sopsPath, err := exec.LookPath("sops")
 	if err != nil {
@@ -202,16 +214,11 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	}
 
 	var done []string
-	for _, target := range keysTargets(newCfg) {
-		file := newCfg.Environments[target].Secrets
+	for _, file := range keysTargetFiles(newCfg) {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
 			continue
 		}
-		keys, err := newCfg.EffectiveRecipientKeys(target)
-		if err != nil {
-			return err
-		}
-		if err := sopskeys.Sync(sopsPath, file, keys); err != nil {
+		if err := sopskeys.Sync(sopsPath, file, newCfg.SecretsRecipientKeys(file)); err != nil {
 			return fmt.Errorf("re-keyed %s (and possibly %s) before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), file, err)
 		}
 		done = append(done, file)

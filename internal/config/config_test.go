@@ -136,9 +136,9 @@ func TestLoad_PerEnvRecipients(t *testing.T) {
 		{Name: "dev", Key: "age1dev", Scope: "local"},
 	}, recipients)
 
-	keys, err := cfg.EffectiveRecipientKeys("production")
+	prod, err := cfg.GetEnvironment("production")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"age1ci", "age1nicolas"}, keys)
+	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
 }
 
 func TestLoad_DuplicateRecipientName(t *testing.T) {
@@ -211,4 +211,18 @@ func TestValidRecipientName(t *testing.T) {
 	for _, name := range []string{"", "a b", "dev: x", "a#b", "-x"} {
 		assert.Error(t, ValidRecipientName(name), name)
 	}
+}
+
+func TestSecretsRecipientKeys_UnionOfEnvironmentsSharingAFile(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n",
+		"  e2e:\n    secrets: ./.envctl/../.envctl/local.enc.yaml\n    age_recipients:\n      vm2: age1vm2\n      dup: age1dev\n  production:\n", 1)
+	cfg := parseConfig(t, content)
+
+	local, err := cfg.GetEnvironment("local")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"age1ci", "age1dev", "age1nicolas", "age1vm2"}, cfg.SecretsRecipientKeys(local.Secrets))
+
+	prod, err := cfg.GetEnvironment("production")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
 }

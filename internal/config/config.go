@@ -113,17 +113,31 @@ func (c *Config) Recipients(envName string) ([]Recipient, error) {
 	return out, nil
 }
 
-// EffectiveRecipientKeys returns the age keys that can decrypt envName's secrets.
-func (c *Config) EffectiveRecipientKeys(envName string) ([]string, error) {
-	recipients, err := c.Recipients(envName)
-	if err != nil {
-		return nil, err
+// SecretsRecipientKeys returns the sorted, de-duplicated union of the effective keys of every environment whose secrets file is file.
+func (c *Config) SecretsRecipientKeys(file string) []string {
+	set := map[string]struct{}{}
+	shared := false
+	for _, env := range c.Environments {
+		if filepath.Clean(env.Secrets) != filepath.Clean(file) {
+			continue
+		}
+		shared = true
+		for _, key := range env.AgeRecipients {
+			set[key] = struct{}{}
+		}
 	}
-	keys := make([]string, 0, len(recipients))
-	for _, r := range recipients {
-		keys = append(keys, r.Key)
+	if !shared {
+		return nil
 	}
-	return keys, nil
+	for _, key := range c.SOPS.AgeRecipients {
+		set[key] = struct{}{}
+	}
+	keys := make([]string, 0, len(set))
+	for key := range set {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func scopedRecipients(out []Recipient, scope string, m map[string]string) []Recipient {

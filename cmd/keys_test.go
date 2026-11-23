@@ -224,3 +224,56 @@ func TestKeysList_Scopes(t *testing.T) {
 	assert.NotContains(t, stdout, devPub)
 	assert.Contains(t, stdout, p.CI.Pub)
 }
+
+func shareLocalSecrets(t *testing.T, p project, env string) {
+	t.Helper()
+	cfg := strings.Replace(string(readFile(t, p.ConfigPath)), "sops:\n",
+		"  "+env+":\n    secrets: .envctl/local.enc.yaml\n    output: .env."+env+"\nsops:\n", 1)
+	require.NoError(t, os.WriteFile(p.ConfigPath, []byte(cfg), 0o644)) //nolint:gosec // test file
+}
+
+func TestKeysAdd_SharedSecretsFile(t *testing.T) {
+	p := setupProject(t)
+	shareLocalSecrets(t, p, "staging")
+	devPub, _ := sopstest.NewKey(t)
+	evePub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "keys", "add", "eve", evePub)
+	require.NoError(t, err)
+
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, devPub, evePub), fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, evePub), fileRecipients(t, p.ProdSecrets))
+}
+
+func TestKeysAdd_EnvScoped_SharedFileKeepsOtherEnvKey(t *testing.T) {
+	p := setupProject(t)
+	shareLocalSecrets(t, p, "e2e")
+	devPub, _ := sopstest.NewKey(t)
+	vm2Pub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "--env", "e2e", "keys", "add", "vm2", vm2Pub)
+	require.NoError(t, err)
+
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, devPub, vm2Pub), fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub), fileRecipients(t, p.ProdSecrets))
+}
+
+func TestKeysRemove_SharedFileKeepsOtherEnvRecipients(t *testing.T) {
+	p := setupProject(t)
+	shareLocalSecrets(t, p, "e2e")
+	devPub, _ := sopstest.NewKey(t)
+	vm2Pub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "--env", "e2e", "keys", "add", "vm2", vm2Pub)
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "--env", "e2e", "keys", "remove", "vm2")
+	require.NoError(t, err)
+
+	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, devPub), fileRecipients(t, p.LocalSecrets))
+}
