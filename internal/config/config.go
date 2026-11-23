@@ -143,15 +143,6 @@ func (c *Config) ConfigPath() string {
 	return c.configPath
 }
 
-// AgeRecipientKeys returns the age public keys as a slice (map values).
-func (c *Config) AgeRecipientKeys() []string {
-	keys := make([]string, 0, len(c.SOPS.AgeRecipients))
-	for _, key := range c.SOPS.AgeRecipients {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
 // FindConfigFile walks up from the current directory looking for .envctl.yaml.
 func FindConfigFile() (string, error) {
 	dir, err := os.Getwd()

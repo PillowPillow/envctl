@@ -5,9 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/PillowPillow/envctl/v2/internal/sopskeys"
 )
 
 var editCmd = &cobra.Command{
@@ -41,10 +42,13 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: Install sops:\n    brew install sops")
 	}
 
-	// If the encrypted file doesn't exist yet, bootstrap it by encrypting an empty YAML
 	if _, err := os.Stat(env.Secrets); os.IsNotExist(err) {
-		if len(cfg.SOPS.AgeRecipients) == 0 {
-			return fmt.Errorf("no age recipients configured — add one with: envctl keys add <name> <age1...>")
+		recipients, err := cfg.EffectiveRecipientKeys(envName)
+		if err != nil {
+			return err
+		}
+		if len(recipients) == 0 {
+			return fmt.Errorf("no age recipients for environment %q — add one with: envctl keys add <name> <age1...>", envName)
 		}
 		if err := os.MkdirAll(filepath.Dir(env.Secrets), 0o755); err != nil {
 			return fmt.Errorf("cannot create directory for secrets file: %w", err)
@@ -52,12 +56,7 @@ func runEdit(cmd *cobra.Command, args []string) error {
 		if err := os.WriteFile(env.Secrets, []byte("{}\n"), 0o600); err != nil {
 			return fmt.Errorf("cannot create secrets file: %w", err)
 		}
-
-		// Encrypt the seed file in-place so sops recognises it
-		encryptArgs := []string{"--encrypt", "--in-place", "--age", strings.Join(cfg.AgeRecipientKeys(), ","), env.Secrets}
-		encCmd := exec.Command(sopsPath, encryptArgs...) //nolint:gosec // sops binary from LookPath, args from validated config
-		encCmd.Stderr = os.Stderr
-		if err := encCmd.Run(); err != nil {
+		if err := sopskeys.Encrypt(sopsPath, env.Secrets, recipients); err != nil {
 			os.Remove(env.Secrets) //nolint:errcheck,gosec // best-effort cleanup
 			return fmt.Errorf("failed to encrypt new secrets file: %w", err)
 		}
