@@ -160,24 +160,52 @@ func TestCanDecrypt(t *testing.T) {
 	assert.Error(t, CanDecrypt(sopsBin(t), file))
 }
 
-func TestForeignKeySources(t *testing.T) {
+func TestCanDecrypt_IgnoresMalformedRepoSopsYaml(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, aKey := sopstest.NewKey(t)
+	file := encryptedFile(t, a)
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(file), ".sops.yaml"), []byte("creation_rules: [broken\n"), 0o600))
+	t.Chdir(filepath.Dir(file))
+	t.Setenv("SOPS_AGE_KEY_FILE", aKey)
+
+	assert.NoError(t, CanDecrypt(sopsBin(t), file))
+}
+
+func TestForeignKeySources_AgeOnly(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, _ := sopstest.NewKey(t)
+
+	got, err := ForeignKeySources(encryptedFile(t, a))
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
+func TestForeignKeySources_FlagsEveryNonAgeSourceShape(t *testing.T) {
 	sopstest.RequireTools(t)
 	a, _ := sopstest.NewKey(t)
 	file := encryptedFile(t, a)
-
-	got, err := ForeignKeySources(file)
-	require.NoError(t, err)
-	assert.Empty(t, got)
-
 	data, err := os.ReadFile(file) //nolint:gosec // test file
 	require.NoError(t, err)
-	tampered := strings.Replace(string(data), "\nsops:\n",
-		"\nsops:\n    hc_vault:\n        - vault_address: http://127.0.0.1:1\n          key_name: k\n    key_groups:\n        - age:\n            - recipient: "+a+"\n", 1)
-	require.NoError(t, os.WriteFile(file, []byte(tampered), 0o600)) //nolint:gosec // test file
 
-	got, err = ForeignKeySources(file)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"hc_vault", "key_groups"}, got)
+	for _, tc := range []struct {
+		name, metadata, want string
+	}{
+		{"list", "    hc_vault:\n        - vault_address: http://127.0.0.1:1\n", "hc_vault"},
+		{"block map", "    hc_vault:\n        vault_address: http://127.0.0.1:1\n        key_name: k\n", "hc_vault"},
+		{"flow map", "    hc_vault: {vault_address: http://127.0.0.1:1, key_name: k}\n", "hc_vault"},
+		{"upper case", "    HC_VAULT:\n        - vault_address: http://127.0.0.1:1\n", "HC_VAULT"},
+		{"age in another case", "    AGE:\n        - recipient: " + a + "\n", "AGE"},
+		{"key_groups map", "    key_groups:\n        hc_vault:\n            vault_address: http://127.0.0.1:1\n", "key_groups"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tampered := strings.Replace(string(data), "\nsops:\n", "\nsops:\n"+tc.metadata, 1)
+			require.NoError(t, os.WriteFile(file, []byte(tampered), 0o600)) //nolint:gosec // test file
+
+			got, err := ForeignKeySources(file)
+			require.NoError(t, err)
+			assert.Equal(t, []string{tc.want}, got)
+		})
+	}
 }
 
 func TestIsolatedConfig_KeepsRecipientsVerbatim(t *testing.T) {

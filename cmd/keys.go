@@ -298,6 +298,7 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 		// Recipient labels are not authenticated, so they only justify a skip when the operator can no longer decrypt (re-run after removing their own key).
 		if current, err := sopskeys.FileRecipients(file); err == nil && slices.Equal(current, newCfg.SecretsRecipientKeys(file)) {
 			fmt.Printf("%s already up to date\n", file)
+			fmt.Fprintf(os.Stderr, "Warning: %s was not rotated because your key cannot decrypt it, so its data key is unchanged. A remaining recipient should re-run this command to rotate it.\n", file)
 			upToDate++
 			continue
 		}
@@ -319,6 +320,9 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	}
 
 	if err := writeFileAtomic(cfg.ConfigPath(), newBytes); err != nil {
+		if len(done) == 0 {
+			return fmt.Errorf("cannot write config %s: %w", cfg.ConfigPath(), err)
+		}
 		return fmt.Errorf("re-keyed %s but cannot write config %s — fix the error and re-run the same command: %w", doneList(done), cfg.ConfigPath(), err)
 	}
 

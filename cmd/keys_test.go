@@ -392,10 +392,11 @@ func TestKeysRemove_RerunSkipsFileOperatorCanNoLongerDecrypt(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, sopskeys.Sync(sopsPath, p.LocalSecrets, []string{p.Nicolas.Pub}))
 
-	stdout, _, err := runCLI(t, "keys", "remove", "ci")
+	stdout, stderr, err := runCLI(t, "keys", "remove", "ci")
 	require.NoError(t, err)
 
 	assert.Contains(t, stdout, p.LocalSecrets+" already up to date")
+	assert.Contains(t, stderr, p.LocalSecrets+" was not rotated")
 	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
 	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.ProdSecrets))
 	assert.NotContains(t, string(readFile(t, p.ConfigPath)), "ci:")
@@ -524,7 +525,7 @@ func TestKeysRemove_NoSameKeyWarningWhenRevoked(t *testing.T) {
 func injectVaultKeySource(t *testing.T, file string) {
 	t.Helper()
 	tampered := strings.Replace(string(readFile(t, file)), "\nsops:\n",
-		"\nsops:\n    hc_vault:\n        - vault_address: http://127.0.0.1:1\n          engine_path: transit\n          key_name: k\n          created_at: \"2026-11-23T00:00:00Z\"\n          enc: vault:v1:ZmFrZQ==\n", 1)
+		"\nsops:\n    hc_vault:\n        vault_address: http://127.0.0.1:1\n        engine_path: transit\n        key_name: k\n        created_at: \"2026-11-23T00:00:00Z\"\n        enc: vault:v1:ZmFrZQ==\n", 1)
 	require.NoError(t, os.WriteFile(file, []byte(tampered), 0o600))
 }
 

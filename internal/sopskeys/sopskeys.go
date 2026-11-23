@@ -44,10 +44,10 @@ func Encrypt(sopsPath, file string, recipients []string) error {
 	return nil
 }
 
-// CanDecrypt discards the plaintext; only the outcome matters.
 func CanDecrypt(sopsPath, file string) error {
 	var stderr bytes.Buffer
-	cmd := exec.Command(sopsPath, "--decrypt", "--", file) //nolint:gosec // sops from LookPath, file from config
+	// A repo .sops.yaml only holds creation rules, which decrypt does not need, yet a malformed one makes sops fail.
+	cmd := exec.Command(sopsPath, "--config", os.DevNull, "--decrypt", "--", file) //nolint:gosec // sops from LookPath, file from config
 	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -73,8 +73,12 @@ func ForeignKeySources(file string) ([]string, error) {
 	}
 	var out []string
 	for name, value := range doc.Sops {
-		if list, ok := value.([]any); ok && len(list) > 0 && name != "age" {
-			out = append(out, name)
+		// sops decodes leniently (a map becomes a one-item list, key names ignore case), so any non-scalar besides "age" counts.
+		switch value.(type) {
+		case []any, map[string]any, map[any]any:
+			if name != "age" {
+				out = append(out, name)
+			}
 		}
 	}
 	sort.Strings(out)
