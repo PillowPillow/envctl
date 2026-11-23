@@ -41,18 +41,9 @@ func AddRecipient(src []byte, envName, name, key string) ([]byte, error) {
 		indent := parent.Content[0].Column - 1
 		d.insert(d.end(parent, indent), spaces(indent)+ageRecipientsKey+":"+d.eol, entry(indent+step))
 	case isEmptyValue(av):
-		body, eol := splitEOL(d.lines[ak.Line-1])
-		colon := colonAfter(body, ak)
-		rest := body[colon+1:]
-		if av.Line == ak.Line && (av.Kind == yaml.MappingNode || av.Value != "") {
-			start := av.Column - 1
-			end := start + len(av.Value)
-			if av.Kind == yaml.MappingNode {
-				end = start + strings.IndexByte(body[start:], '}') + 1
-			}
-			rest = body[end:]
+		if err := d.dropValue(ak, av); err != nil {
+			return nil, err
 		}
-		d.lines[ak.Line-1] = body[:colon+1] + rest + eol
 		d.insert(ak.Line, entry(ak.Column-1+step))
 	case av.Kind != yaml.MappingNode:
 		return nil, errors.New("age_recipients is not a mapping")
@@ -177,15 +168,72 @@ func (d *lineDoc) indentStep() int {
 
 // end returns the index of the first line after n, skipping continuation lines indented deeper than indent.
 func (d *lineDoc) end(n *yaml.Node, indent int) int {
+	if last := lastNode(n); last.Style&(yaml.LiteralStyle|yaml.FoldedStyle) != 0 {
+		return d.blockScalarEnd(last)
+	}
 	i := maxLine(n)
-	for i < len(d.lines) {
-		trimmed := strings.TrimSpace(d.lines[i])
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || leadingSpaces(d.lines[i]) <= indent {
+	for j := i; j < len(d.lines); j++ {
+		trimmed := strings.TrimSpace(d.lines[j])
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if leadingSpaces(d.lines[j]) <= indent {
 			break
 		}
-		i++
+		i = j + 1
 	}
 	return i
+}
+
+// blockScalarEnd returns the index of the line after block scalar s, whose content may hold blank and #-prefixed lines.
+func (d *lineDoc) blockScalarEnd(s *yaml.Node) int {
+	header := d.lines[s.Line-1]
+	parent := leadingSpaces(header)
+	keep := strings.Contains(strings.Fields(string([]rune(header)[s.Column-1:]))[0], "+")
+	end, content := s.Line, -1
+	for j := s.Line; j < len(d.lines); j++ {
+		if strings.TrimSpace(d.lines[j]) == "" {
+			if keep {
+				end = j + 1
+			}
+			continue
+		}
+		ind := leadingSpaces(d.lines[j])
+		if content < 0 && ind > parent {
+			content = ind
+		}
+		if content < 0 || ind < content {
+			break
+		}
+		end = j + 1
+	}
+	return end
+}
+
+// dropValue removes an empty value token ({} or a null), wherever it sits, so entries can follow the key.
+func (d *lineDoc) dropValue(k, v *yaml.Node) error {
+	if v.Kind == yaml.ScalarNode && v.Value == "" {
+		return nil
+	}
+	body, eol := splitEOL(d.lines[v.Line-1])
+	start := v.Column - 1
+	end := start + len(v.Value)
+	if v.Kind == yaml.MappingNode {
+		closing := strings.IndexByte(body[start:], '}')
+		if closing < 0 {
+			return errFlowRecipients
+		}
+		end = start + closing + 1
+	}
+	switch {
+	case v.Line == k.Line:
+		d.lines[v.Line-1] = body[:colonAfter(body, k)+1] + body[end:] + eol
+	case strings.TrimSpace(body[end:]) == "":
+		d.remove(v.Line-1, v.Line)
+	default:
+		d.lines[v.Line-1] = body[:start] + body[end:] + eol
+	}
+	return nil
 }
 
 func (d *lineDoc) insert(at int, lines ...string) {
@@ -215,6 +263,13 @@ func isBlockMapping(n *yaml.Node) bool {
 
 func isEmptyValue(n *yaml.Node) bool {
 	return (n.Kind == yaml.MappingNode && len(n.Content) == 0) || (n.Kind == yaml.ScalarNode && n.Tag == "!!null")
+}
+
+func lastNode(n *yaml.Node) *yaml.Node {
+	for len(n.Content) > 0 {
+		n = n.Content[len(n.Content)-1]
+	}
+	return n
 }
 
 func maxLine(n *yaml.Node) int {

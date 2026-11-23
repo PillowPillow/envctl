@@ -20,7 +20,7 @@ func readGolden(t *testing.T) []byte {
 
 func TestAddRemoveRecipient_GoldenRoundTrip(t *testing.T) {
 	src := readGolden(t)
-	for _, envName := range []string{"", "local"} {
+	for _, envName := range []string{"", "local", "production"} {
 		t.Run("env="+envName, func(t *testing.T) {
 			added, err := AddRecipient(src, envName, "dev", "age1dev")
 			require.NoError(t, err)
@@ -140,4 +140,37 @@ func TestRemoveRecipient_NotFound(t *testing.T) {
 	_, err := RemoveRecipient(readGolden(t), "local", "bob")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `recipient "bob" not found in scope "local"`)
+}
+
+func TestAddRecipient_TrailingBlockScalar(t *testing.T) {
+	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n" +
+		"  local:\n    secrets: s.enc.yaml\n    overrides:\n" +
+		"      NOTES: |\n        first\n\n        last\n" +
+		"      CERT: |\n        line1\n\n        line2\n        # not a comment\n" +
+		"\n  production:\n    secrets: p.enc.yaml\n"
+
+	out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+	require.NoError(t, err)
+
+	cfg, err := Parse(out, ".envctl.yaml")
+	require.NoError(t, err)
+	local := cfg.Environments["local"]
+	assert.Equal(t, "first\n\nlast\n", local.Overrides["NOTES"])
+	assert.Equal(t, "line1\n\nline2\n# not a comment\n", local.Overrides["CERT"])
+	assert.Equal(t, map[string]string{"dev": "age1dev"}, local.AgeRecipients)
+
+	removed, err := RemoveRecipient(out, "local", "dev")
+	require.NoError(t, err)
+	assert.Equal(t, src, string(removed))
+}
+
+func TestAddRecipient_EmptyValueOnNextLine(t *testing.T) {
+	head := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: s.enc.yaml\nsops:\n  age_recipients:\n"
+	for _, value := range []string{"{}", "~"} {
+		t.Run(value, func(t *testing.T) {
+			out, err := AddRecipient([]byte(head+"    "+value+"\n"), "", "dev", "age1dev")
+			require.NoError(t, err)
+			assert.Equal(t, head+"    dev: age1dev\n", string(out))
+		})
+	}
 }
