@@ -16,8 +16,7 @@ type Config struct {
 	Environments map[string]Environment `yaml:"environments"`
 	SOPS         SOPSConfig             `yaml:"sops"`
 
-	configPath string // set by Load, used by Save
-	rawSecrets map[string]string
+	configPath string
 }
 
 type Environment struct {
@@ -74,9 +73,7 @@ func Parse(data []byte, path string) (*Config, error) {
 
 	cfg.configPath = path
 	dir := filepath.Dir(path)
-	cfg.rawSecrets = make(map[string]string, len(cfg.Environments))
 	for name, env := range cfg.Environments {
-		cfg.rawSecrets[name] = env.Secrets
 		if !filepath.IsAbs(env.Secrets) {
 			env.Secrets = filepath.Join(dir, env.Secrets)
 			cfg.Environments[name] = env
@@ -144,29 +141,6 @@ func scopedRecipients(out []Recipient, scope string, m map[string]string) []Reci
 // ConfigPath returns the path the config was loaded from.
 func (c *Config) ConfigPath() string {
 	return c.configPath
-}
-
-// Save writes the config back to the file it was loaded from.
-func (c *Config) Save() error {
-	if c.configPath == "" {
-		return fmt.Errorf("config path not set (config was not loaded from a file)")
-	}
-	out := *c
-	out.Environments = make(map[string]Environment, len(c.Environments))
-	for name, env := range c.Environments {
-		if raw, ok := c.rawSecrets[name]; ok {
-			env.Secrets = raw
-		}
-		out.Environments[name] = env
-	}
-	data, err := yaml.Marshal(&out)
-	if err != nil {
-		return fmt.Errorf("cannot marshal config: %w", err)
-	}
-	if err := os.WriteFile(c.configPath, data, 0o644); err != nil { //nolint:gosec // same permissions as init
-		return fmt.Errorf("cannot write config %s: %w", c.configPath, err)
-	}
-	return nil
 }
 
 // AgeRecipientKeys returns the age public keys as a slice (map values).
