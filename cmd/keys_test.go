@@ -314,12 +314,22 @@ func TestKeysAdd_InvalidKey(t *testing.T) {
 		strings.ToUpper(devPub),
 	} {
 		_, _, err := runCLI(t, "keys", "add", "dev", key)
-		require.ErrorContains(t, err, "invalid age public key: expected age1 followed by 58 bech32 characters", key)
+		require.ErrorContains(t, err, "invalid age public key: expected an age1... bech32 recipient", key)
 	}
 
 	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
 	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
 	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+}
+
+func TestAgePublicKeyRe_AcceptsPostQuantumAndPluginRecipients(t *testing.T) {
+	for _, key := range []string{
+		"age1pq1" + strings.Repeat("q", 1952),
+		"age1yubikey1" + strings.Repeat("q", 58),
+		"age1tag1" + strings.Repeat("q", 60),
+	} {
+		assert.True(t, agePublicKeyRe.MatchString(key), key)
+	}
 }
 
 func TestKeysAdd_ReservedName(t *testing.T) {

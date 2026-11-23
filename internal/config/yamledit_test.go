@@ -164,6 +164,25 @@ func TestAddRecipient_TrailingBlockScalar(t *testing.T) {
 	assert.Equal(t, src, string(removed))
 }
 
+func TestAddRecipient_TrailingKeepBlockScalarWithAnchorOrTag(t *testing.T) {
+	for _, prefix := range []string{"&m ", "!!str ", "&m !!str "} {
+		t.Run(prefix, func(t *testing.T) {
+			src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n" +
+				"  local:\n    secrets: s.enc.yaml\n    overrides:\n" +
+				"      MSG: " + prefix + "|+\n        hello\n\n\n" +
+				"  production:\n    secrets: p.enc.yaml\n"
+
+			out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+			require.NoError(t, err)
+
+			cfg, err := Parse(out, ".envctl.yaml")
+			require.NoError(t, err)
+			assert.Equal(t, "hello\n\n\n", cfg.Environments["local"].Overrides["MSG"])
+			assert.Equal(t, map[string]string{"dev": "age1dev"}, cfg.Environments["local"].AgeRecipients)
+		})
+	}
+}
+
 func TestAddRecipient_EmptyValueOnNextLine(t *testing.T) {
 	head := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: s.enc.yaml\nsops:\n  age_recipients:\n"
 	for _, value := range []string{"{}", "~"} {

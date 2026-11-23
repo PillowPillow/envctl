@@ -189,7 +189,14 @@ func (d *lineDoc) end(n *yaml.Node, indent int) int {
 func (d *lineDoc) blockScalarEnd(s *yaml.Node) int {
 	header := d.lines[s.Line-1]
 	parent := leadingSpaces(header)
-	keep := strings.Contains(strings.Fields(string([]rune(header)[s.Column-1:]))[0], "+")
+	keep := false
+	// The node column can point at an anchor or tag that precedes the | or > indicator.
+	for _, field := range strings.Fields(string([]rune(header)[s.Column-1:])) {
+		if field[0] == '|' || field[0] == '>' {
+			keep = strings.Contains(field, "+")
+			break
+		}
+	}
 	end, content := s.Line, -1
 	for j := s.Line; j < len(d.lines); j++ {
 		if strings.TrimSpace(d.lines[j]) == "" {

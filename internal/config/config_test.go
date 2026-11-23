@@ -182,7 +182,6 @@ environments:
 	other, err := cfg.GetEnvironment("other")
 	require.NoError(t, err)
 	assert.Equal(t, abs, other.Secrets)
-	assert.Equal(t, dir, cfg.Dir())
 }
 
 func TestRecipients_AllScopes(t *testing.T) {
@@ -225,6 +224,22 @@ func TestSecretsRecipientKeys_UnionOfEnvironmentsSharingAFile(t *testing.T) {
 	prod, err := cfg.GetEnvironment("production")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
+}
+
+func TestSecretsRecipientKeys_SymlinkedSharedFile(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n",
+		"  e2e:\n    secrets: .envctl/e2e.enc.yaml\n    age_recipients:\n      vm2: age1vm2\n  production:\n", 1)
+	path := filepath.Join(t.TempDir(), ".envctl.yaml")
+	cfg, err := Parse([]byte(content), path)
+	require.NoError(t, err)
+	envctlDir := filepath.Join(filepath.Dir(path), ".envctl")
+	require.NoError(t, os.MkdirAll(envctlDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(envctlDir, "local.enc.yaml"), []byte("{}\n"), 0o600))
+	require.NoError(t, os.Symlink("local.enc.yaml", filepath.Join(envctlDir, "e2e.enc.yaml")))
+
+	want := []string{"age1ci", "age1dev", "age1nicolas", "age1vm2"}
+	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["local"].Secrets))
+	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["e2e"].Secrets))
 }
 
 func TestLoad_SameRecipientNameInTwoEnvs(t *testing.T) {

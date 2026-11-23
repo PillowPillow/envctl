@@ -82,11 +82,6 @@ func Parse(data []byte, path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// Dir returns the directory holding the config file.
-func (c *Config) Dir() string {
-	return filepath.Dir(c.configPath)
-}
-
 // EnvNames returns the environment names in sorted order.
 func (c *Config) EnvNames() []string {
 	names := make([]string, 0, len(c.Environments))
@@ -117,8 +112,9 @@ func (c *Config) Recipients(envName string) ([]Recipient, error) {
 func (c *Config) SecretsRecipientKeys(file string) []string {
 	set := map[string]struct{}{}
 	shared := false
+	target := CanonicalPath(file)
 	for _, env := range c.Environments {
-		if filepath.Clean(env.Secrets) != filepath.Clean(file) {
+		if CanonicalPath(env.Secrets) != target {
 			continue
 		}
 		shared = true
@@ -138,6 +134,14 @@ func (c *Config) SecretsRecipientKeys(file string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// CanonicalPath resolves symlinks when path exists, so two spellings of one secrets file compare equal.
+func CanonicalPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
 }
 
 func scopedRecipients(out []Recipient, scope string, m map[string]string) []Recipient {

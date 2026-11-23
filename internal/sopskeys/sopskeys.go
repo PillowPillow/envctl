@@ -76,8 +76,14 @@ func isolatedConfig(recipients []string) (path string, cleanup func(), err error
 	}
 	cleanup = func() { os.RemoveAll(dir) } //nolint:errcheck,gosec // best-effort cleanup
 	path = filepath.Join(dir, "sops.yaml")
-	content := "creation_rules:\n  - age: " + strings.Join(recipients, ",") + "\n"
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	content, err := yaml.Marshal(map[string][]map[string]string{
+		"creation_rules": {{"age": strings.Join(recipients, ",")}},
+	})
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("encoding sops config: %w", err)
+	}
+	if err := os.WriteFile(path, content, 0o600); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("writing sops config: %w", err)
 	}

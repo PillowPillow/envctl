@@ -17,7 +17,8 @@ import (
 	"github.com/PillowPillow/envctl/v2/internal/sopskeys"
 )
 
-var agePublicKeyRe = regexp.MustCompile(`^age1[02-9ac-hj-np-z]{58}$`)
+// The second form covers recipients with a longer prefix, such as age1pq1 (post-quantum) or age1yubikey1 (plugins).
+var agePublicKeyRe = regexp.MustCompile(`^age1(?:[02-9ac-hj-np-z]{58}|[a-z0-9]*1[02-9ac-hj-np-z]{6,})$`)
 
 var keysCmd = &cobra.Command{
 	Use:   "keys",
@@ -82,7 +83,7 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 		return err
 	}
 	if !agePublicKeyRe.MatchString(key) {
-		return fmt.Errorf("invalid age public key: expected age1 followed by 58 bech32 characters")
+		return fmt.Errorf("invalid age public key: expected an age1... bech32 recipient")
 	}
 
 	cfg, err := loadConfig()
@@ -243,8 +244,8 @@ func keysTargetFiles(cfg *config.Config) []string {
 	var files []string
 	for _, target := range keysTargets(cfg) {
 		file := filepath.Clean(cfg.Environments[target].Secrets)
-		if !seen[file] {
-			seen[file] = true
+		if canonical := config.CanonicalPath(file); !seen[canonical] {
+			seen[canonical] = true
 			files = append(files, file)
 		}
 	}

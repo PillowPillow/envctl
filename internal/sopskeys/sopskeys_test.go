@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/PillowPillow/envctl/v2/internal/sopstest"
 )
@@ -144,6 +145,24 @@ func TestSync_EmptyRecipients(t *testing.T) {
 	after, err := os.ReadFile(file) //nolint:gosec // test file
 	require.NoError(t, err)
 	assert.Equal(t, before, after)
+}
+
+func TestIsolatedConfig_KeepsRecipientsVerbatim(t *testing.T) {
+	recipients := []string{"age1a #not-a-comment", "age1b: x"}
+	path, cleanup, err := isolatedConfig(recipients)
+	require.NoError(t, err)
+	defer cleanup()
+	data, err := os.ReadFile(path) //nolint:gosec // test temp path
+	require.NoError(t, err)
+
+	var cfg struct {
+		CreationRules []struct {
+			Age string `yaml:"age"`
+		} `yaml:"creation_rules"`
+	}
+	require.NoError(t, yaml.Unmarshal(data, &cfg))
+	require.Len(t, cfg.CreationRules, 1)
+	assert.Equal(t, "age1a #not-a-comment,age1b: x", cfg.CreationRules[0].Age)
 }
 
 func TestEncrypt_UsesGivenRecipients(t *testing.T) {
