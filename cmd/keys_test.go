@@ -325,14 +325,19 @@ func TestKeysAdd_InvalidKey(t *testing.T) {
 	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
 }
 
-func TestAgePublicKeyRe_AcceptsPostQuantumAndPluginRecipients(t *testing.T) {
-	for _, key := range []string{
-		"age1pq1" + strings.Repeat("q", 1952),
-		"age1yubikey1" + strings.Repeat("q", 58),
-		"age1tag1" + strings.Repeat("q", 60),
-	} {
-		assert.True(t, agePublicKeyRe.MatchString(key), key)
+func TestKeysAdd_BadChecksum(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	last := devPub[len(devPub)-1]
+	typo := "q"
+	if last == 'q' {
+		typo = "p"
 	}
+
+	_, _, err := runCLI(t, "keys", "add", "dev", devPub[:len(devPub)-1]+typo)
+	require.ErrorContains(t, err, "bad checksum")
+
+	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
 }
 
 func TestKeysAdd_ReservedName(t *testing.T) {

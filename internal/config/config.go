@@ -8,6 +8,8 @@ import (
 	"sort"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/PillowPillow/envctl/v2/internal/agekey"
 )
 
 type Config struct {
@@ -213,9 +215,12 @@ func (c *Config) validate() error {
 			return fmt.Errorf("environment %q: secrets path is required", name)
 		}
 	}
-	for name := range c.SOPS.AgeRecipients {
+	for name, key := range c.SOPS.AgeRecipients {
 		if err := ValidRecipientName(name); err != nil {
 			return err
+		}
+		if err := agekey.ValidateRecipient(key); err != nil {
+			return fmt.Errorf("recipient %q: %w", name, err)
 		}
 	}
 	for _, envName := range c.EnvNames() {
@@ -228,6 +233,9 @@ func (c *Config) validate() error {
 		for _, name := range names {
 			if err := ValidRecipientName(name); err != nil {
 				return err
+			}
+			if err := agekey.ValidateRecipient(recipients[name]); err != nil {
+				return fmt.Errorf("environment %q: recipient %q: %w", envName, name, err)
 			}
 			if _, dup := c.SOPS.AgeRecipients[name]; dup {
 				return fmt.Errorf("recipient %q is defined both globally and in environment %q", name, envName)

@@ -22,7 +22,7 @@ func TestAddRemoveRecipient_GoldenRoundTrip(t *testing.T) {
 	src := readGolden(t)
 	for _, envName := range []string{"", "local", "production"} {
 		t.Run("env="+envName, func(t *testing.T) {
-			added, err := AddRecipient(src, envName, "dev", "age1dev")
+			added, err := AddRecipient(src, envName, "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 			require.NoError(t, err)
 			assert.NotEqual(t, string(src), string(added))
 
@@ -36,36 +36,36 @@ func TestAddRemoveRecipient_GoldenRoundTrip(t *testing.T) {
 func TestAddRecipient_Env_CreatesBlock(t *testing.T) {
 	src := readGolden(t)
 
-	out, err := AddRecipient(src, "local", "dev", "age1dev")
+	out, err := AddRecipient(src, "local", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
-	block := "\n    age_recipients:\n      dev: age1dev\n"
+	block := "\n    age_recipients:\n      dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n"
 	assert.Contains(t, string(out), "      APP_ENV: local"+block+"\n  production:\n")
 	assert.Equal(t, 1, strings.Count(string(out), block))
 
 	cfg, err := Parse(out, ".envctl.yaml")
 	require.NoError(t, err)
-	assert.Equal(t, "age1dev", cfg.Environments["local"].AgeRecipients["dev"])
+	assert.Equal(t, "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", cfg.Environments["local"].AgeRecipients["dev"])
 	assert.Empty(t, cfg.Environments["production"].AgeRecipients)
 }
 
 func TestAddRecipient_Global_AppendsToBlock(t *testing.T) {
 	src := readGolden(t)
 
-	out, err := AddRecipient(src, "", "dev", "age1dev")
+	out, err := AddRecipient(src, "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
-	want := strings.Replace(string(src), "    nicolas: age1nicolas\n", "    nicolas: age1nicolas\n    dev: age1dev\n", 1)
+	want := strings.Replace(string(src), "    nicolas: age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q\n", "    nicolas: age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q\n    dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n", 1)
 	assert.Equal(t, want, string(out))
 }
 
 func TestAddRecipient_GlobalMissingSops(t *testing.T) {
 	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: .envctl/secrets.local.enc.yaml\n"
 
-	out, err := AddRecipient([]byte(src), "", "dev", "age1dev")
+	out, err := AddRecipient([]byte(src), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
-	assert.Equal(t, src+"sops:\n  age_recipients:\n    dev: age1dev\n", string(out))
+	assert.Equal(t, src+"sops:\n  age_recipients:\n    dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n", string(out))
 }
 
 func TestAddRecipient_EmptyFlowMap(t *testing.T) {
@@ -81,13 +81,13 @@ func TestAddRecipient_EmptyFlowMap(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(src), "age_recipients: {}")
 
-	out, err := AddRecipient(src, "", "dev", "age1dev")
+	out, err := AddRecipient(src, "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
-	assert.Contains(t, string(out), "\n    age_recipients:\n        dev: age1dev\n")
+	assert.Contains(t, string(out), "\n    age_recipients:\n        dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n")
 
 	cfg, err := Parse(out, ".envctl.yaml")
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"dev": "age1dev"}, cfg.SOPS.AgeRecipients)
+	assert.Equal(t, map[string]string{"dev": "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh"}, cfg.SOPS.AgeRecipients)
 
 	removed, err := RemoveRecipient(out, "", "dev")
 	require.NoError(t, err)
@@ -95,9 +95,9 @@ func TestAddRecipient_EmptyFlowMap(t *testing.T) {
 }
 
 func TestAddRecipient_NonEmptyFlowMap(t *testing.T) {
-	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: s.enc.yaml\nsops:\n  age_recipients: {ci: age1ci}\n"
+	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: s.enc.yaml\nsops:\n  age_recipients: {ci: age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6}\n"
 
-	_, err := AddRecipient([]byte(src), "", "dev", "age1dev")
+	_, err := AddRecipient([]byte(src), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "flow style is not supported")
 }
@@ -106,7 +106,7 @@ func TestAddRecipient_PreservesCRLF(t *testing.T) {
 	src := strings.ReplaceAll(string(readGolden(t)), "\n", "\r\n")
 
 	for _, envName := range []string{"", "local"} {
-		out, err := AddRecipient([]byte(src), envName, "dev", "age1dev")
+		out, err := AddRecipient([]byte(src), envName, "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 		require.NoError(t, err)
 
 		lines := strings.SplitAfter(string(out), "\n")
@@ -120,18 +120,18 @@ func TestAddRecipient_PreservesCRLF(t *testing.T) {
 func TestAddRecipient_NoTrailingNewline(t *testing.T) {
 	src := strings.TrimSuffix(string(readGolden(t)), "\n")
 
-	out, err := AddRecipient([]byte(src), "", "dev", "age1dev")
+	out, err := AddRecipient([]byte(src), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
 	cfg, err := Parse(out, ".envctl.yaml")
 	require.NoError(t, err)
-	assert.Equal(t, "age1nicolas", cfg.SOPS.AgeRecipients["nicolas"])
-	assert.Equal(t, "age1dev", cfg.SOPS.AgeRecipients["dev"])
-	assert.True(t, strings.HasSuffix(string(out), "    nicolas: age1nicolas\n    dev: age1dev\n"))
+	assert.Equal(t, "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", cfg.SOPS.AgeRecipients["nicolas"])
+	assert.Equal(t, "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", cfg.SOPS.AgeRecipients["dev"])
+	assert.True(t, strings.HasSuffix(string(out), "    nicolas: age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q\n    dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n"))
 }
 
 func TestAddRecipient_UnknownEnv(t *testing.T) {
-	_, err := AddRecipient(readGolden(t), "staging", "dev", "age1dev")
+	_, err := AddRecipient(readGolden(t), "staging", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `environment "staging" not found`)
 }
@@ -149,7 +149,7 @@ func TestAddRecipient_TrailingBlockScalar(t *testing.T) {
 		"      CERT: |\n        line1\n\n        line2\n        # not a comment\n" +
 		"\n  production:\n    secrets: p.enc.yaml\n"
 
-	out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+	out, err := AddRecipient([]byte(src), "local", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
 	cfg, err := Parse(out, ".envctl.yaml")
@@ -157,7 +157,7 @@ func TestAddRecipient_TrailingBlockScalar(t *testing.T) {
 	local := cfg.Environments["local"]
 	assert.Equal(t, "first\n\nlast\n", local.Overrides["NOTES"])
 	assert.Equal(t, "line1\n\nline2\n# not a comment\n", local.Overrides["CERT"])
-	assert.Equal(t, map[string]string{"dev": "age1dev"}, local.AgeRecipients)
+	assert.Equal(t, map[string]string{"dev": "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh"}, local.AgeRecipients)
 
 	removed, err := RemoveRecipient(out, "local", "dev")
 	require.NoError(t, err)
@@ -172,13 +172,13 @@ func TestAddRecipient_TrailingKeepBlockScalarWithAnchorOrTag(t *testing.T) {
 				"      MSG: " + prefix + "|+\n        hello\n\n\n" +
 				"  production:\n    secrets: p.enc.yaml\n"
 
-			out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+			out, err := AddRecipient([]byte(src), "local", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 			require.NoError(t, err)
 
 			cfg, err := Parse(out, ".envctl.yaml")
 			require.NoError(t, err)
 			assert.Equal(t, "hello\n\n\n", cfg.Environments["local"].Overrides["MSG"])
-			assert.Equal(t, map[string]string{"dev": "age1dev"}, cfg.Environments["local"].AgeRecipients)
+			assert.Equal(t, map[string]string{"dev": "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh"}, cfg.Environments["local"].AgeRecipients)
 		})
 	}
 }
@@ -187,9 +187,9 @@ func TestAddRecipient_EmptyValueOnNextLine(t *testing.T) {
 	head := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: s.enc.yaml\nsops:\n  age_recipients:\n"
 	for _, value := range []string{"{}", "~"} {
 		t.Run(value, func(t *testing.T) {
-			out, err := AddRecipient([]byte(head+"    "+value+"\n"), "", "dev", "age1dev")
+			out, err := AddRecipient([]byte(head+"    "+value+"\n"), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 			require.NoError(t, err)
-			assert.Equal(t, head+"    dev: age1dev\n", string(out))
+			assert.Equal(t, head+"    dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n", string(out))
 		})
 	}
 }
@@ -198,9 +198,9 @@ func TestAddRecipient_GlobalEmptySops(t *testing.T) {
 	base := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: .envctl/secrets.local.enc.yaml\n"
 	for _, sops := range []string{"sops:\n", "sops: {}\n", "sops: ~\n"} {
 		t.Run(sops, func(t *testing.T) {
-			out, err := AddRecipient([]byte(base+sops), "", "dev", "age1dev")
+			out, err := AddRecipient([]byte(base+sops), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 			require.NoError(t, err)
-			assert.Equal(t, base+"sops:\n  age_recipients:\n    dev: age1dev\n", string(out))
+			assert.Equal(t, base+"sops:\n  age_recipients:\n    dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n", string(out))
 		})
 	}
 }
@@ -208,22 +208,22 @@ func TestAddRecipient_GlobalEmptySops(t *testing.T) {
 func TestAddRecipient_Env_TrailingMultilineFlowSequence(t *testing.T) {
 	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n    strip: [\n      A,\n    ]\nsops:\n  age_recipients: {}\n"
 
-	out, err := AddRecipient([]byte(src), "local", "dev", "age1dev")
+	out, err := AddRecipient([]byte(src), "local", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
 	cfg, err := Parse(out, ".envctl.yaml")
 	require.NoError(t, err)
-	assert.Equal(t, "age1dev", cfg.Environments["local"].AgeRecipients["dev"])
+	assert.Equal(t, "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", cfg.Environments["local"].AgeRecipients["dev"])
 	assert.Equal(t, []string{"A"}, cfg.Environments["local"].Strip)
 }
 
 func TestAddRecipient_GlobalMissingSopsBeforeDocumentEnd(t *testing.T) {
 	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n...\n"
 
-	out, err := AddRecipient([]byte(src), "", "dev", "age1dev")
+	out, err := AddRecipient([]byte(src), "", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
 	require.NoError(t, err)
 
 	cfg, err := Parse(out, ".envctl.yaml")
 	require.NoError(t, err)
-	assert.Equal(t, "age1dev", cfg.SOPS.AgeRecipients["dev"])
+	assert.Equal(t, "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", cfg.SOPS.AgeRecipients["dev"])
 }

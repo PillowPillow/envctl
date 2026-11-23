@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -13,12 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/PillowPillow/envctl/v2/internal/agekey"
 	"github.com/PillowPillow/envctl/v2/internal/config"
 	"github.com/PillowPillow/envctl/v2/internal/sopskeys"
 )
-
-// The second form covers recipients with a longer prefix, such as age1pq1 (post-quantum) or age1yubikey1 (plugins).
-var agePublicKeyRe = regexp.MustCompile(`^age1(?:[02-9ac-hj-np-z]{58}|[a-z0-9]*1[02-9ac-hj-np-z]{6,})$`)
 
 var keysCmd = &cobra.Command{
 	Use:   "keys",
@@ -82,8 +79,8 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 	if err := config.ValidRecipientName(name); err != nil {
 		return err
 	}
-	if !agePublicKeyRe.MatchString(key) {
-		return fmt.Errorf("invalid age public key: expected an age1... bech32 recipient")
+	if err := agekey.ValidateRecipient(key); err != nil {
+		return err
 	}
 
 	cfg, err := loadConfig()

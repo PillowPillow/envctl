@@ -32,7 +32,7 @@ environments:
       - DEBUG_VAR
 sops:
   age_recipients:
-    alice: age1abc123
+    alice: age10qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqvjmlsk
 `
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".envctl.yaml")
@@ -118,13 +118,13 @@ environments:
   local:
     secrets: .envctl/local.enc.yaml
     age_recipients:
-      dev: age1dev
+      dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh
   production:
     secrets: .envctl/production.enc.yaml
 sops:
   age_recipients:
-    nicolas: age1nicolas
-    ci: age1ci
+    nicolas: age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q
+    ci: age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6
 `
 
 func parseConfig(t *testing.T, content string) *Config {
@@ -140,25 +140,39 @@ func TestLoad_PerEnvRecipients(t *testing.T) {
 	recipients, err := cfg.Recipients("local")
 	require.NoError(t, err)
 	assert.Equal(t, []Recipient{
-		{Name: "ci", Key: "age1ci", Scope: ScopeGlobal},
-		{Name: "nicolas", Key: "age1nicolas", Scope: ScopeGlobal},
-		{Name: "dev", Key: "age1dev", Scope: "local"},
+		{Name: "ci", Key: "age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", Scope: ScopeGlobal},
+		{Name: "nicolas", Key: "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", Scope: ScopeGlobal},
+		{Name: "dev", Key: "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", Scope: "local"},
 	}, recipients)
 
 	prod, err := cfg.GetEnvironment("production")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
+	assert.Equal(t, []string{"age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q"}, cfg.SecretsRecipientKeys(prod.Secrets))
 }
 
 func TestLoad_DuplicateRecipientName(t *testing.T) {
-	content := strings.Replace(perEnvConfig, "dev: age1dev", "ci: age1other", 1)
+	content := strings.Replace(perEnvConfig, "dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", "ci: age15qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqaq0d3m", 1)
 	_, err := Parse([]byte(content), ".envctl.yaml")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `recipient "ci" is defined both globally and in environment "local"`)
 }
 
+func TestLoad_InvalidRecipientKey(t *testing.T) {
+	for _, tc := range []struct {
+		name, old, new, want string
+	}{
+		{"global comma-joined", "ci: age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", `ci: "age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6,age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh"`, `recipient "ci": invalid age public key`},
+		{"env bad checksum", "dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", "dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvq", `environment "local": recipient "dev": invalid age public key: bad checksum`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(strings.Replace(perEnvConfig, tc.old, tc.new, 1)), ".envctl.yaml")
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
 func TestLoad_InvalidRecipientName(t *testing.T) {
-	content := strings.Replace(perEnvConfig, "dev: age1dev", `"a b": age1dev`, 1)
+	content := strings.Replace(perEnvConfig, "dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", `"a b": age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh`, 1)
 	_, err := Parse([]byte(content), ".envctl.yaml")
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `invalid recipient name "a b"`)
@@ -199,9 +213,9 @@ func TestRecipients_AllScopes(t *testing.T) {
 	recipients, err := cfg.Recipients("")
 	require.NoError(t, err)
 	assert.Equal(t, []Recipient{
-		{Name: "ci", Key: "age1ci", Scope: ScopeGlobal},
-		{Name: "nicolas", Key: "age1nicolas", Scope: ScopeGlobal},
-		{Name: "dev", Key: "age1dev", Scope: "local"},
+		{Name: "ci", Key: "age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", Scope: ScopeGlobal},
+		{Name: "nicolas", Key: "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", Scope: ScopeGlobal},
+		{Name: "dev", Key: "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", Scope: "local"},
 	}, recipients)
 }
 
@@ -223,21 +237,21 @@ func TestValidRecipientName(t *testing.T) {
 
 func TestSecretsRecipientKeys_UnionOfEnvironmentsSharingAFile(t *testing.T) {
 	content := strings.Replace(perEnvConfig, "  production:\n",
-		"  e2e:\n    secrets: ./.envctl/../.envctl/local.enc.yaml\n    age_recipients:\n      vm2: age1vm2\n      dup: age1dev\n  production:\n", 1)
+		"  e2e:\n    secrets: ./.envctl/../.envctl/local.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n      dup: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n  production:\n", 1)
 	cfg := parseConfig(t, content)
 
 	local, err := cfg.GetEnvironment("local")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"age1ci", "age1dev", "age1nicolas", "age1vm2"}, cfg.SecretsRecipientKeys(local.Secrets))
+	assert.Equal(t, []string{"age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", "age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr"}, cfg.SecretsRecipientKeys(local.Secrets))
 
 	prod, err := cfg.GetEnvironment("production")
 	require.NoError(t, err)
-	assert.Equal(t, []string{"age1ci", "age1nicolas"}, cfg.SecretsRecipientKeys(prod.Secrets))
+	assert.Equal(t, []string{"age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q"}, cfg.SecretsRecipientKeys(prod.Secrets))
 }
 
 func TestSecretsRecipientKeys_SymlinkedSharedFile(t *testing.T) {
 	content := strings.Replace(perEnvConfig, "  production:\n",
-		"  e2e:\n    secrets: .envctl/e2e.enc.yaml\n    age_recipients:\n      vm2: age1vm2\n  production:\n", 1)
+		"  e2e:\n    secrets: .envctl/e2e.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n  production:\n", 1)
 	path := filepath.Join(t.TempDir(), ".envctl.yaml")
 	cfg, err := Parse([]byte(content), path)
 	require.NoError(t, err)
@@ -246,18 +260,18 @@ func TestSecretsRecipientKeys_SymlinkedSharedFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(envctlDir, "local.enc.yaml"), []byte("{}\n"), 0o600))
 	require.NoError(t, os.Symlink("local.enc.yaml", filepath.Join(envctlDir, "e2e.enc.yaml")))
 
-	want := []string{"age1ci", "age1dev", "age1nicolas", "age1vm2"}
+	want := []string{"age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", "age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q", "age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr"}
 	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["local"].Secrets))
 	assert.Equal(t, want, cfg.SecretsRecipientKeys(cfg.Environments["e2e"].Secrets))
 }
 
 func TestLoad_SameRecipientNameInTwoEnvs(t *testing.T) {
 	content := strings.Replace(perEnvConfig, "    secrets: .envctl/production.enc.yaml\n",
-		"    secrets: .envctl/production.enc.yaml\n    age_recipients:\n      dev: age1proddev\n", 1)
+		"    secrets: .envctl/production.enc.yaml\n    age_recipients:\n      dev: age16qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqhn87p5\n", 1)
 	cfg := parseConfig(t, content)
 
 	recipients, err := cfg.Recipients("")
 	require.NoError(t, err)
-	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age1dev", Scope: "local"})
-	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age1proddev", Scope: "production"})
+	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", Scope: "local"})
+	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age16qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqhn87p5", Scope: "production"})
 }
