@@ -88,6 +88,15 @@ environments:
     overrides: {}`,
 			wantErr: "secrets path is required",
 		},
+		{
+			name: "reserved environment name",
+			content: `version: "1"
+template: .env.example
+environments:
+  global:
+    secrets: .envctl/global.enc.yaml`,
+			wantErr: `environment name "global" is reserved`,
+		},
 	}
 
 	for _, tt := range tests {

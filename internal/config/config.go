@@ -206,6 +206,9 @@ func (c *Config) validate() error {
 		return fmt.Errorf("at least one environment is required")
 	}
 	for _, name := range c.EnvNames() {
+		if name == ScopeGlobal {
+			return fmt.Errorf("environment name %q is reserved for global recipients", name)
+		}
 		if c.Environments[name].Secrets == "" {
 			return fmt.Errorf("environment %q: secrets path is required", name)
 		}

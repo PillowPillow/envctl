@@ -1,8 +1,10 @@
 package sopskeys
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +40,21 @@ func Encrypt(sopsPath, file string, recipients []string) error {
 
 	if err := runSops(sopsPath, "--config", cfg, "--encrypt", "--in-place", "--age", strings.Join(recipients, ","), file); err != nil {
 		return fmt.Errorf("sops encrypt failed for %s: %w", file, err)
+	}
+	return nil
+}
+
+// CanDecrypt discards the plaintext; only the outcome matters.
+func CanDecrypt(sopsPath, file string) error {
+	var stderr bytes.Buffer
+	cmd := exec.Command(sopsPath, "--decrypt", "--", file) //nolint:gosec // sops from LookPath, file from config
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return errors.New(msg)
+		}
+		return err
 	}
 	return nil
 }

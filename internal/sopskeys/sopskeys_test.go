@@ -147,6 +147,19 @@ func TestSync_EmptyRecipients(t *testing.T) {
 	assert.Equal(t, before, after)
 }
 
+func TestCanDecrypt(t *testing.T) {
+	sopstest.RequireTools(t)
+	a, aKey := sopstest.NewKey(t)
+	_, bKey := sopstest.NewKey(t)
+	file := encryptedFile(t, a)
+
+	t.Setenv("SOPS_AGE_KEY_FILE", aKey)
+	assert.NoError(t, CanDecrypt(sopsBin(t), file))
+
+	t.Setenv("SOPS_AGE_KEY_FILE", bKey)
+	assert.Error(t, CanDecrypt(sopsBin(t), file))
+}
+
 func TestIsolatedConfig_KeepsRecipientsVerbatim(t *testing.T) {
 	recipients := []string{"age1a #not-a-comment", "age1b: x"}
 	path, cleanup, err := isolatedConfig(recipients)

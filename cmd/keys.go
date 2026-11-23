@@ -191,7 +191,11 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 	for _, target := range keysTargets(newCfg) {
-		if len(newCfg.SecretsRecipientKeys(newCfg.Environments[target].Secrets)) == 0 {
+		secrets := newCfg.Environments[target].Secrets
+		if _, err := os.Stat(secrets); os.IsNotExist(err) {
+			continue
+		}
+		if len(newCfg.SecretsRecipientKeys(secrets)) == 0 {
 			return fmt.Errorf("cannot remove %q: environment %q would have no recipients left", name, target)
 		}
 	}
@@ -260,20 +264,32 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: brew install sops")
 	}
 
-	var done []string
+	var pending, undecryptable []string
 	upToDate := 0
 	for _, file := range keysTargetFiles(newCfg) {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
 			continue
 		}
-		keys := newCfg.SecretsRecipientKeys(file)
-		// Skipping files already re-keyed lets a re-run succeed after the operator removed their own key from them.
-		if current, err := sopskeys.FileRecipients(file); err == nil && slices.Equal(current, keys) {
+		decryptErr := sopskeys.CanDecrypt(sopsPath, file)
+		if decryptErr == nil {
+			pending = append(pending, file)
+			continue
+		}
+		// Recipient labels are not authenticated, so they only justify a skip when the operator can no longer decrypt (re-run after removing their own key).
+		if current, err := sopskeys.FileRecipients(file); err == nil && slices.Equal(current, newCfg.SecretsRecipientKeys(file)) {
 			fmt.Printf("%s already up to date\n", file)
 			upToDate++
 			continue
 		}
-		if err := sopskeys.Sync(sopsPath, file, keys); err != nil {
+		undecryptable = append(undecryptable, fmt.Sprintf("  %s: %v", file, decryptErr))
+	}
+	if len(undecryptable) > 0 {
+		return fmt.Errorf("cannot decrypt these secrets files with your age key; nothing was changed — run this command as a recipient of every targeted file:\n%s", strings.Join(undecryptable, "\n"))
+	}
+
+	var done []string
+	for _, file := range pending {
+		if err := sopskeys.Sync(sopsPath, file, newCfg.SecretsRecipientKeys(file)); err != nil {
 			return fmt.Errorf("re-keyed %s (and possibly %s) before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), file, err)
 		}
 		done = append(done, file)

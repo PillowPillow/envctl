@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -124,7 +126,7 @@ func TestKeysAdd_DuplicateAcrossScopes(t *testing.T) {
 	assert.Equal(t, afterFirst, readFile(t, p.ConfigPath))
 }
 
-func TestKeysAdd_SyncFailureLeavesConfigUntouched(t *testing.T) {
+func TestKeysAdd_UndecryptableFileChangesNothing(t *testing.T) {
 	p := setupProject(t)
 	devPub, devKey := sopstest.NewKey(t)
 	evePub, _ := sopstest.NewKey(t)
@@ -132,15 +134,16 @@ func TestKeysAdd_SyncFailureLeavesConfigUntouched(t *testing.T) {
 	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
 	require.NoError(t, err)
 	configBefore := readFile(t, p.ConfigPath)
+	localBefore, prodBefore := readFile(t, p.LocalSecrets), readFile(t, p.ProdSecrets)
 	t.Setenv("SOPS_AGE_KEY_FILE", devKey)
 
 	_, _, err = runCLI(t, "keys", "add", "eve", evePub)
-	require.Error(t, err)
+	require.ErrorContains(t, err, "nothing was changed")
 
-	assert.ErrorContains(t, err, p.LocalSecrets)
-	assert.ErrorContains(t, err, "re-run the same command")
-	assert.Contains(t, fileRecipients(t, p.LocalSecrets), evePub)
-	assert.NotContains(t, fileRecipients(t, p.ProdSecrets), evePub)
+	assert.ErrorContains(t, err, p.ProdSecrets)
+	assert.NotContains(t, err.Error(), p.LocalSecrets)
+	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
+	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
 	assert.Equal(t, configBefore, readFile(t, p.ConfigPath))
 }
 
@@ -378,17 +381,12 @@ func TestKeysAdd_SameNameInTwoEnvs(t *testing.T) {
 	assert.Contains(t, stdout, "dev      "+prodDev+"  production")
 }
 
-func TestKeysRemove_RerunAfterPartialFailure(t *testing.T) {
+func TestKeysRemove_RerunSkipsFileOperatorCanNoLongerDecrypt(t *testing.T) {
 	p := setupProject(t)
-	prodBefore := readFile(t, p.ProdSecrets)
-	require.NoError(t, os.WriteFile(p.ProdSecrets, []byte("not: encrypted\n"), 0o600))
+	sopsPath, err := exec.LookPath("sops")
+	require.NoError(t, err)
+	require.NoError(t, sopskeys.Sync(sopsPath, p.LocalSecrets, []string{p.Nicolas.Pub}))
 
-	_, _, err := runCLI(t, "keys", "remove", "ci")
-	require.ErrorContains(t, err, "re-run the same command")
-	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
-	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
-
-	require.NoError(t, os.WriteFile(p.ProdSecrets, prodBefore, 0o600))
 	stdout, _, err := runCLI(t, "keys", "remove", "ci")
 	require.NoError(t, err)
 
@@ -396,6 +394,63 @@ func TestKeysRemove_RerunAfterPartialFailure(t *testing.T) {
 	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
 	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.ProdSecrets))
 	assert.NotContains(t, string(readFile(t, p.ConfigPath)), "ci:")
+}
+
+func TestKeysRemove_RotatesWhenRecipientLabelsAlreadyMatch(t *testing.T) {
+	p := setupProject(t)
+	sopsCfg := filepath.Join(t.TempDir(), "sops.yaml")
+	require.NoError(t, os.WriteFile(sopsCfg, []byte("creation_rules:\n  - age: "+p.Nicolas.Pub+"\n"), 0o600))
+	out, err := exec.Command("sops", "--config", sopsCfg, "updatekeys", "--yes", p.LocalSecrets).CombinedOutput() //nolint:gosec // test command
+	require.NoError(t, err, string(out))
+	require.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
+	localBefore := readFile(t, p.LocalSecrets)
+	t.Setenv("SOPS_AGE_KEY_FILE", p.Nicolas.KeyFile)
+
+	stdout, _, err := runCLI(t, "keys", "remove", "ci")
+	require.NoError(t, err)
+
+	assert.NotContains(t, stdout, "already up to date")
+	assert.NotEqual(t, tokenLine(t, localBefore), tokenLine(t, readFile(t, p.LocalSecrets)))
+	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
+}
+
+func tokenLine(t *testing.T, data []byte) string {
+	t.Helper()
+	for _, l := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(l, "TOKEN:") {
+			return l
+		}
+	}
+	t.Fatal("TOKEN line not found")
+	return ""
+}
+
+func TestKeysRemove_LastRecipientWithoutSecretsFile(t *testing.T) {
+	p := setupProject(t)
+	require.NoError(t, os.Remove(p.LocalSecrets))
+	require.NoError(t, os.Remove(p.ProdSecrets))
+
+	_, _, err := runCLI(t, "keys", "remove", "nicolas")
+	require.NoError(t, err)
+	_, _, err = runCLI(t, "keys", "remove", "ci")
+	require.NoError(t, err)
+
+	stdout, _, err := runCLI(t, "keys", "list")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "No age recipients configured.")
+}
+
+func TestKeysRemove_LastRecipientRefusedOnlyWhereSecretsFileExists(t *testing.T) {
+	p := setupProject(t)
+	require.NoError(t, os.Remove(p.ProdSecrets))
+	_, _, err := runCLI(t, "keys", "remove", "nicolas")
+	require.NoError(t, err)
+	configBefore := readFile(t, p.ConfigPath)
+
+	_, _, err = runCLI(t, "keys", "remove", "ci")
+	require.ErrorContains(t, err, `environment "local" would have no recipients left`)
+
+	assert.Equal(t, configBefore, readFile(t, p.ConfigPath))
 }
 
 func TestKeysAdd_KeepsConfigModeAndLeavesNoTempFile(t *testing.T) {
