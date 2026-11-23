@@ -217,6 +217,26 @@ func TestAddRecipient_Env_TrailingMultilineFlowSequence(t *testing.T) {
 	assert.Equal(t, []string{"A"}, cfg.Environments["local"].Strip)
 }
 
+func TestAddRecipient_Env_TrailingMultilineQuotedScalar(t *testing.T) {
+	for _, tc := range []struct{ name, value, want string }{
+		{"double", `"x \" y\\` + "\n    z\"", `x " y\ z`},
+		{"single", `'x '' y` + "\n    z'", `x ' y z`},
+		{"anchor", `&a "x` + "\n    z\"", `x z`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n    overrides:\n      A: " + tc.value + "\nsops:\n  age_recipients: {}\n"
+
+			out, err := AddRecipient([]byte(src), "local", "dev", "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh")
+			require.NoError(t, err)
+
+			cfg, err := Parse(out, ".envctl.yaml")
+			require.NoError(t, err)
+			assert.Equal(t, "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", cfg.Environments["local"].AgeRecipients["dev"])
+			assert.Equal(t, tc.want, cfg.Environments["local"].Overrides["A"])
+		})
+	}
+}
+
 func TestAddRecipient_GlobalMissingSopsBeforeDocumentEnd(t *testing.T) {
 	src := "version: \"1\"\ntemplate: .env.example\nenvironments:\n  local:\n    secrets: a.yaml\n...\n"
 

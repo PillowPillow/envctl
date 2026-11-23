@@ -183,6 +183,9 @@ func (d *lineDoc) end(n *yaml.Node, indent int) int {
 		return d.blockScalarEnd(last)
 	}
 	i := maxLine(n)
+	if last := lastNode(n); last.Style&(yaml.DoubleQuotedStyle|yaml.SingleQuotedStyle) != 0 {
+		i = max(i, d.quotedScalarEnd(last))
+	}
 	for j := i; j < len(d.lines); j++ {
 		trimmed := strings.TrimSpace(d.lines[j])
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -195,6 +198,36 @@ func (d *lineDoc) end(n *yaml.Node, indent int) int {
 		i = j + 1
 	}
 	return i
+}
+
+// quotedScalarEnd returns the 1-based line of the closing quote of s, whose continuation lines may sit at any indent.
+func (d *lineDoc) quotedScalarEnd(s *yaml.Node) int {
+	quote := '"'
+	if s.Style&yaml.SingleQuotedStyle != 0 {
+		quote = '\''
+	}
+	opened := false
+	for j := s.Line - 1; j < len(d.lines); j++ {
+		line := []rune(d.lines[j])
+		k := 0
+		if j == s.Line-1 {
+			k = s.Column - 1
+		}
+		for ; k < len(line); k++ {
+			switch {
+			case !opened:
+				opened = line[k] == quote
+			case quote == '"' && line[k] == '\\':
+				k++
+			case line[k] != quote:
+			case quote == '\'' && k+1 < len(line) && line[k+1] == '\'':
+				k++
+			default:
+				return j + 1
+			}
+		}
+	}
+	return s.Line
 }
 
 // blockScalarEnd returns the index of the line after block scalar s, whose content may hold blank and #-prefixed lines.
