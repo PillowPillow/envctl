@@ -277,3 +277,41 @@ func TestKeysRemove_SharedFileKeepsOtherEnvRecipients(t *testing.T) {
 
 	assert.Equal(t, sortedKeys(p.CI.Pub, p.Nicolas.Pub, devPub), fileRecipients(t, p.LocalSecrets))
 }
+
+func TestKeysAdd_InvalidKey(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	evePub, _ := sopstest.NewKey(t)
+	localBefore, prodBefore := readFile(t, p.LocalSecrets), readFile(t, p.ProdSecrets)
+
+	for _, key := range []string{
+		devPub + "," + evePub,
+		devPub + "\n    eve: " + evePub,
+		"age1abc",
+		strings.ToUpper(devPub),
+	} {
+		_, _, err := runCLI(t, "keys", "add", "dev", key)
+		require.ErrorContains(t, err, "invalid age public key: expected age1 followed by 58 bech32 characters", key)
+	}
+
+	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
+	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
+	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+}
+
+func TestKeysAdd_ReservedName(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	localBefore, prodBefore := readFile(t, p.LocalSecrets), readFile(t, p.ProdSecrets)
+
+	for _, name := range []string{"null", "NULL", "Null"} {
+		_, _, err := runCLI(t, "keys", "add", name, devPub)
+		require.ErrorContains(t, err, "refusing to write .envctl.yaml: the edit did not produce the expected recipients", name)
+		_, _, err = runCLI(t, "--env", "local", "keys", "add", name, devPub)
+		require.ErrorContains(t, err, "refusing to write .envctl.yaml: the edit did not produce the expected recipients", name)
+	}
+
+	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
+	assert.Equal(t, localBefore, readFile(t, p.LocalSecrets))
+	assert.Equal(t, prodBefore, readFile(t, p.ProdSecrets))
+}

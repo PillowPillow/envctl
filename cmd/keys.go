@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -14,6 +15,8 @@ import (
 	"github.com/PillowPillow/envctl/v2/internal/config"
 	"github.com/PillowPillow/envctl/v2/internal/sopskeys"
 )
+
+var agePublicKeyRe = regexp.MustCompile(`^age1[02-9ac-hj-np-z]{58}$`)
 
 var keysCmd = &cobra.Command{
 	Use:   "keys",
@@ -77,8 +80,8 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 	if err := config.ValidRecipientName(name); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(key, "age1") {
-		return fmt.Errorf("invalid age public key: must start with \"age1\"")
+	if !agePublicKeyRe.MatchString(key) {
+		return fmt.Errorf("invalid age public key: expected age1 followed by 58 bech32 characters")
 	}
 
 	cfg, err := loadConfig()
@@ -113,6 +116,10 @@ func runKeysAdd(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	added := config.Recipient{Name: name, Key: key, Scope: scopeOf(envName)}
+	if err := checkRecipients(newCfg, append(all, added)); err != nil {
+		return err
+	}
 
 	if err := syncAndSave(cfg, newCfg, newBytes); err != nil {
 		return err
@@ -129,21 +136,26 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	scope := config.ScopeGlobal
 	if envName != "" {
 		if _, err := cfg.GetEnvironment(envName); err != nil {
 			return err
 		}
-		scope = envName
 	}
+	scope := scopeOf(envName)
 
 	all, err := cfg.Recipients("")
 	if err != nil {
 		return err
 	}
 	var inScope []string
+	var kept []config.Recipient
 	found := false
 	for _, r := range all {
+		if r.Scope == scope && r.Name == name {
+			found = true
+		} else {
+			kept = append(kept, r)
+		}
 		if r.Scope != scope {
 			if r.Name == name && r.Scope == config.ScopeGlobal {
 				return fmt.Errorf("recipient %q is global; remove it without --env (it cannot be removed from a single environment)", name)
@@ -151,9 +163,6 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 			continue
 		}
 		inScope = append(inScope, r.Name)
-		if r.Name == name {
-			found = true
-		}
 	}
 	if !found {
 		return fmt.Errorf("recipient %q not found in scope %q (available: %v)", name, scope, inScope)
@@ -171,6 +180,9 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := checkRecipients(newCfg, kept); err != nil {
+		return err
+	}
 	for _, target := range keysTargets(newCfg) {
 		if len(newCfg.SecretsRecipientKeys(newCfg.Environments[target].Secrets)) == 0 {
 			return fmt.Errorf("cannot remove %q: environment %q would have no recipients left", name, target)
@@ -182,6 +194,34 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Removed recipient %q\n", name)
 	fmt.Fprintln(os.Stderr, "Warning: the removed key can still decrypt older versions of these files from git history. Rotate the secret values themselves to fully revoke access.")
+	return nil
+}
+
+func scopeOf(env string) string {
+	if env == "" {
+		return config.ScopeGlobal
+	}
+	return env
+}
+
+// checkRecipients guards against line edits that YAML reads back differently, such as a name parsed as null.
+func checkRecipients(newCfg *config.Config, want []config.Recipient) error {
+	got, err := newCfg.Recipients("")
+	if err != nil {
+		return err
+	}
+	count := map[config.Recipient]int{}
+	for _, r := range want {
+		count[r]++
+	}
+	for _, r := range got {
+		count[r]--
+	}
+	for _, n := range count {
+		if n != 0 {
+			return fmt.Errorf("refusing to write %s: the edit did not produce the expected recipients", config.DefaultConfigFile)
+		}
+	}
 	return nil
 }
 
