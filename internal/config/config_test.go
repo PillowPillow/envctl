@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,5 +100,115 @@ environments:
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 		})
+	}
+}
+
+const perEnvConfig = `version: "1"
+template: .env.example
+environments:
+  local:
+    secrets: .envctl/local.enc.yaml
+    age_recipients:
+      dev: age1dev
+  production:
+    secrets: .envctl/production.enc.yaml
+sops:
+  age_recipients:
+    nicolas: age1nicolas
+    ci: age1ci
+`
+
+func parseConfig(t *testing.T, content string) *Config {
+	t.Helper()
+	cfg, err := Parse([]byte(content), filepath.Join(t.TempDir(), ".envctl.yaml"))
+	require.NoError(t, err)
+	return cfg
+}
+
+func TestLoad_PerEnvRecipients(t *testing.T) {
+	cfg := parseConfig(t, perEnvConfig)
+
+	recipients, err := cfg.Recipients("local")
+	require.NoError(t, err)
+	assert.Equal(t, []Recipient{
+		{Name: "ci", Key: "age1ci", Scope: ScopeGlobal},
+		{Name: "nicolas", Key: "age1nicolas", Scope: ScopeGlobal},
+		{Name: "dev", Key: "age1dev", Scope: "local"},
+	}, recipients)
+
+	keys, err := cfg.EffectiveRecipientKeys("production")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"age1ci", "age1nicolas"}, keys)
+}
+
+func TestLoad_DuplicateRecipientName(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "dev: age1dev", "ci: age1other", 1)
+	_, err := Parse([]byte(content), ".envctl.yaml")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `recipient "ci" is defined both globally and in environment "local"`)
+}
+
+func TestLoad_InvalidRecipientName(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "dev: age1dev", `"a b": age1dev`, 1)
+	_, err := Parse([]byte(content), ".envctl.yaml")
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `invalid recipient name "a b"`)
+}
+
+func TestLoad_ResolvesSecretsRelativeToConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "elsewhere", "abs.enc.yaml")
+	content := `version: "1"
+template: .env.example
+environments:
+  local:
+    secrets: .envctl/s.enc.yaml
+    output: .env
+  other:
+    secrets: ` + abs + `
+`
+	path := filepath.Join(dir, ".envctl.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	local, err := cfg.GetEnvironment("local")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, ".envctl/s.enc.yaml"), local.Secrets)
+	assert.Equal(t, ".env", local.Output)
+	assert.Equal(t, ".env.example", cfg.Template)
+
+	other, err := cfg.GetEnvironment("other")
+	require.NoError(t, err)
+	assert.Equal(t, abs, other.Secrets)
+	assert.Equal(t, dir, cfg.Dir())
+}
+
+func TestRecipients_AllScopes(t *testing.T) {
+	cfg := parseConfig(t, perEnvConfig)
+
+	recipients, err := cfg.Recipients("")
+	require.NoError(t, err)
+	assert.Equal(t, []Recipient{
+		{Name: "ci", Key: "age1ci", Scope: ScopeGlobal},
+		{Name: "nicolas", Key: "age1nicolas", Scope: ScopeGlobal},
+		{Name: "dev", Key: "age1dev", Scope: "local"},
+	}, recipients)
+}
+
+func TestRecipients_UnknownEnv(t *testing.T) {
+	cfg := parseConfig(t, perEnvConfig)
+
+	_, err := cfg.Recipients("staging")
+	assert.ErrorContains(t, err, `environment "staging" not found`)
+}
+
+func TestValidRecipientName(t *testing.T) {
+	for _, name := range []string{"dev", "ci-1", "a.b_c"} {
+		assert.NoError(t, ValidRecipientName(name), name)
+	}
+	for _, name := range []string{"", "a b", "dev: x", "a#b", "-x"} {
+		assert.Error(t, ValidRecipientName(name), name)
 	}
 }
