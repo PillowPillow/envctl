@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/PillowPillow/envctl/internal/config"
-	"github.com/PillowPillow/envctl/internal/resolver"
-	"github.com/PillowPillow/envctl/internal/secret"
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/config"
+	"github.com/PillowPillow/envctl/v2/internal/resolver"
+	"github.com/PillowPillow/envctl/v2/internal/secret"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 // ParseTemplate detects the appropriate parser for the given template file,

@@ -55,7 +55,7 @@ docker pull ghcr.io/pillowpillow/envctl:latest
 ### From source
 
 ```bash
-go install github.com/PillowPillow/envctl@latest
+go install github.com/PillowPillow/envctl/v2@latest
 ```
 
 ### Prerequisites

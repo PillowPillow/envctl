@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/PillowPillow/envctl/internal/resolver"
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/resolver"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 func TestPrintVerifyResult_MissingSecrets(t *testing.T) {

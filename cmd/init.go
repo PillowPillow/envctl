@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/PillowPillow/envctl/internal/config"
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/config"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 var initCmd = &cobra.Command{

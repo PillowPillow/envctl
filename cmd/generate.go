@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/PillowPillow/envctl/internal/pipeline"
-	"github.com/PillowPillow/envctl/internal/resolver"
-	"github.com/PillowPillow/envctl/internal/secret"
+	"github.com/PillowPillow/envctl/v2/internal/pipeline"
+	"github.com/PillowPillow/envctl/v2/internal/resolver"
+	"github.com/PillowPillow/envctl/v2/internal/secret"
 )
 
 var (

@@ -1,4 +1,4 @@
-module github.com/PillowPillow/envctl
+module github.com/PillowPillow/envctl/v2
 
 go 1.27.1
 
