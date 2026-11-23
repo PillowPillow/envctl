@@ -367,3 +367,60 @@ func TestKeysAdd_SameNameInTwoEnvs(t *testing.T) {
 	assert.NotContains(t, stdout, localDev)
 	assert.Contains(t, stdout, "dev      "+prodDev+"  production")
 }
+
+func TestKeysRemove_RerunAfterPartialFailure(t *testing.T) {
+	p := setupProject(t)
+	prodBefore := readFile(t, p.ProdSecrets)
+	require.NoError(t, os.WriteFile(p.ProdSecrets, []byte("not: encrypted\n"), 0o600))
+
+	_, _, err := runCLI(t, "keys", "remove", "ci")
+	require.ErrorContains(t, err, "re-run the same command")
+	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, p.OriginalConfig, readFile(t, p.ConfigPath))
+
+	require.NoError(t, os.WriteFile(p.ProdSecrets, prodBefore, 0o600))
+	stdout, _, err := runCLI(t, "keys", "remove", "ci")
+	require.NoError(t, err)
+
+	assert.Contains(t, stdout, p.LocalSecrets+" already up to date")
+	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.LocalSecrets))
+	assert.Equal(t, []string{p.Nicolas.Pub}, fileRecipients(t, p.ProdSecrets))
+	assert.NotContains(t, string(readFile(t, p.ConfigPath)), "ci:")
+}
+
+func TestKeysAdd_KeepsConfigModeAndLeavesNoTempFile(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	require.NoError(t, os.Chmod(p.ConfigPath, 0o640))
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+
+	info, err := os.Stat(p.ConfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	assert.Contains(t, string(readFile(t, p.ConfigPath)), "dev: "+devPub)
+	entries, err := os.ReadDir(p.Dir)
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.ElementsMatch(t, []string{".envctl", ".envctl.yaml", ".env.example"}, names)
+}
+
+func TestKeysAdd_ConfigSymlinkStaysALink(t *testing.T) {
+	p := setupProject(t)
+	devPub, _ := sopstest.NewKey(t)
+	real := p.ConfigPath + ".real"
+	require.NoError(t, os.Rename(p.ConfigPath, real))
+	require.NoError(t, os.Symlink(real, p.ConfigPath))
+
+	_, _, err := runCLI(t, "--env", "local", "keys", "add", "dev", devPub)
+	require.NoError(t, err)
+
+	info, err := os.Lstat(p.ConfigPath)
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode()&os.ModeSymlink)
+	assert.Contains(t, string(readFile(t, real)), "dev: "+devPub)
+}

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -259,29 +260,76 @@ func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	}
 
 	var done []string
+	upToDate := 0
 	for _, file := range keysTargetFiles(newCfg) {
 		if _, err := os.Stat(file); os.IsNotExist(err) {
 			continue
 		}
-		if err := sopskeys.Sync(sopsPath, file, newCfg.SecretsRecipientKeys(file)); err != nil {
+		keys := newCfg.SecretsRecipientKeys(file)
+		// Skipping files already re-keyed lets a re-run succeed after the operator removed their own key from them.
+		if current, err := sopskeys.FileRecipients(file); err == nil && slices.Equal(current, keys) {
+			fmt.Printf("%s already up to date\n", file)
+			upToDate++
+			continue
+		}
+		if err := sopskeys.Sync(sopsPath, file, keys); err != nil {
 			return fmt.Errorf("re-keyed %s (and possibly %s) before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), file, err)
 		}
 		done = append(done, file)
 	}
 
-	info, err := os.Stat(cfg.ConfigPath())
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(cfg.ConfigPath(), newBytes, info.Mode().Perm()); err != nil { //nolint:gosec // path from FindConfigFile or --config
+	if err := writeFileAtomic(cfg.ConfigPath(), newBytes); err != nil {
 		return fmt.Errorf("cannot write config %s: %w", cfg.ConfigPath(), err)
 	}
 
-	if len(done) > 0 {
+	switch {
+	case len(done) > 0:
 		fmt.Printf("Updated keys in %d secrets file(s)\n", len(done))
-	} else {
+	case upToDate == 0:
 		fmt.Println("No encrypted secrets files found — keys will apply on next edit")
 	}
+	return nil
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	// Resolve symlinks so the rename replaces the target file, not the link.
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	renamed := false
+	defer func() {
+		if !renamed {
+			os.Remove(tmp.Name()) //nolint:errcheck,gosec // best-effort cleanup
+		}
+	}()
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), target); err != nil {
+		return err
+	}
+	renamed = true
 	return nil
 }
 
