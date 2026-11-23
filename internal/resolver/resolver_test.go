@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 func TestResolve_PriorityChain(t *testing.T) {

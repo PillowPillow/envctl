@@ -6,8 +6,8 @@ import (
 
 	"github.com/fatih/color"
 
-	"github.com/PillowPillow/envctl/internal/resolver"
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/resolver"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 var (

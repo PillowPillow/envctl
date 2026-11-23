@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/PillowPillow/envctl/internal/config"
-	"github.com/PillowPillow/envctl/internal/updater"
+	"github.com/PillowPillow/envctl/v2/internal/config"
+	"github.com/PillowPillow/envctl/v2/internal/updater"
 )
 
 var (

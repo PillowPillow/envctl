@@ -1,0 +1,25 @@
+# envctl configuration
+# Recipients are edited in place by `envctl keys`.
+
+version: "1"
+template: .env.example
+
+environments:
+  local:
+    secrets: .envctl/secrets.local.enc.yaml
+    output: ".env"
+    overrides:
+      APP_DEBUG: true  # verbose logs locally
+      APP_ENV: local
+
+  production:
+    secrets: .envctl/secrets.production.enc.yaml  # shared with CI
+    overrides:
+      APP_ENV: production
+    strip:
+      - DEBUG_VAR
+
+sops:
+  age_recipients:
+    ci: age12qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy5ped6  # GitHub Actions
+    nicolas: age14qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq0eq50q

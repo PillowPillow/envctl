@@ -5,12 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
-	"github.com/PillowPillow/envctl/internal/config"
+	"github.com/PillowPillow/envctl/v2/internal/agekey"
+	"github.com/PillowPillow/envctl/v2/internal/config"
+	"github.com/PillowPillow/envctl/v2/internal/sopskeys"
 )
 
 var keysCmd = &cobra.Command{
@@ -20,20 +24,20 @@ var keysCmd = &cobra.Command{
 
 var keysListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List configured age recipients",
+	Short: "List configured age recipients (all scopes, or one environment with --env)",
 	RunE:  runKeysList,
 }
 
 var keysAddCmd = &cobra.Command{
 	Use:   "add <name> <age-public-key>",
-	Short: "Add an age recipient and re-encrypt secrets",
+	Short: "Add an age recipient (global, or to one environment with --env) and re-encrypt secrets",
 	Args:  cobra.ExactArgs(2),
 	RunE:  runKeysAdd,
 }
 
 var keysRemoveCmd = &cobra.Command{
 	Use:   "remove <name>",
-	Short: "Remove an age recipient and re-encrypt secrets",
+	Short: "Remove an age recipient (global, or from one environment with --env) and re-encrypt secrets",
 	Args:  cobra.ExactArgs(1),
 	RunE:  runKeysRemove,
 }
@@ -51,16 +55,20 @@ func runKeysList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if len(cfg.SOPS.AgeRecipients) == 0 {
+	recipients, err := cfg.Recipients(envName)
+	if err != nil {
+		return err
+	}
+	if len(recipients) == 0 {
 		fmt.Println("No age recipients configured.")
 		fmt.Println("\n  Add one with: envctl keys add <name> <age1...>")
 		return nil
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tKEY")
-	for name, key := range cfg.SOPS.AgeRecipients {
-		fmt.Fprintf(w, "%s\t%s\n", name, key)
+	fmt.Fprintln(w, "NAME\tKEY\tSCOPE")
+	for _, r := range recipients {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", r.Name, r.Key, r.Scope)
 	}
 	return w.Flush()
 }
@@ -68,32 +76,56 @@ func runKeysList(_ *cobra.Command, _ []string) error {
 func runKeysAdd(_ *cobra.Command, args []string) error {
 	name, key := args[0], args[1]
 
-	if !strings.HasPrefix(key, "age1") {
-		return fmt.Errorf("invalid age public key: must start with \"age1\"")
+	if err := config.ValidRecipientName(name); err != nil {
+		return err
+	}
+	if err := agekey.ValidateRecipient(key); err != nil {
+		return err
 	}
 
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
-
-	if cfg.SOPS.AgeRecipients == nil {
-		cfg.SOPS.AgeRecipients = make(map[string]string)
+	if envName != "" {
+		if _, err := cfg.GetEnvironment(envName); err != nil {
+			return err
+		}
 	}
 
-	if existing, ok := cfg.SOPS.AgeRecipients[name]; ok {
-		return fmt.Errorf("recipient %q already exists (key: %s)\n\n  To update, remove it first: envctl keys remove %s", name, existing, name)
+	all, err := cfg.Recipients("")
+	if err != nil {
+		return err
+	}
+	scope := scopeOf(envName)
+	for _, r := range all {
+		if r.Name == name && (scope == config.ScopeGlobal || r.Scope == config.ScopeGlobal || r.Scope == scope) {
+			return fmt.Errorf("recipient %q already exists in scope %q", name, r.Scope)
+		}
 	}
 
-	cfg.SOPS.AgeRecipients[name] = key
-
-	if err := cfg.Save(); err != nil {
+	src, err := os.ReadFile(cfg.ConfigPath())
+	if err != nil {
+		return fmt.Errorf("cannot read config file %s: %w", cfg.ConfigPath(), err)
+	}
+	newBytes, err := config.AddRecipient(src, envName, name, key)
+	if err != nil {
+		return err
+	}
+	newCfg, err := config.Parse(newBytes, cfg.ConfigPath())
+	if err != nil {
+		return err
+	}
+	added := config.Recipient{Name: name, Key: key, Scope: scope}
+	if err := checkRecipients(newCfg, append(all, added)); err != nil {
 		return err
 	}
 
+	if err := syncAndSave(cfg, newCfg, newBytes); err != nil {
+		return err
+	}
 	fmt.Printf("Added recipient %q\n", name)
-
-	return updateSecretsKeys(cfg)
+	return nil
 }
 
 func runKeysRemove(_ *cobra.Command, args []string) error {
@@ -104,82 +136,250 @@ func runKeysRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	if _, ok := cfg.SOPS.AgeRecipients[name]; !ok {
-		available := make([]string, 0, len(cfg.SOPS.AgeRecipients))
-		for n := range cfg.SOPS.AgeRecipients {
-			available = append(available, n)
+	if envName != "" {
+		if _, err := cfg.GetEnvironment(envName); err != nil {
+			return err
 		}
-		return fmt.Errorf("recipient %q not found (available: %v)", name, available)
 	}
+	scope := scopeOf(envName)
 
-	delete(cfg.SOPS.AgeRecipients, name)
-
-	if err := cfg.Save(); err != nil {
+	all, err := cfg.Recipients("")
+	if err != nil {
 		return err
 	}
+	var inScope, otherEnvs []string
+	var kept []config.Recipient
+	var removedKey string
+	found := false
+	for _, r := range all {
+		switch {
+		case r.Scope == scope:
+			inScope = append(inScope, r.Name)
+		case r.Name == name && r.Scope == config.ScopeGlobal:
+			return fmt.Errorf("recipient %q is global; remove it without --env (it cannot be removed from a single environment)", name)
+		case r.Name == name:
+			otherEnvs = append(otherEnvs, r.Scope)
+		}
+		if r.Scope == scope && r.Name == name {
+			found = true
+			removedKey = r.Key
+			continue
+		}
+		kept = append(kept, r)
+	}
+	if !found {
+		if scope == config.ScopeGlobal && len(otherEnvs) > 0 {
+			return fmt.Errorf("recipient %q not found in scope %q (it exists in: %s — use --env)", name, scope, strings.Join(otherEnvs, ", "))
+		}
+		return fmt.Errorf("recipient %q not found in scope %q (available: %v)", name, scope, inScope)
+	}
 
+	src, err := os.ReadFile(cfg.ConfigPath())
+	if err != nil {
+		return fmt.Errorf("cannot read config file %s: %w", cfg.ConfigPath(), err)
+	}
+	newBytes, err := config.RemoveRecipient(src, envName, name)
+	if err != nil {
+		return err
+	}
+	newCfg, err := config.Parse(newBytes, cfg.ConfigPath())
+	if err != nil {
+		return err
+	}
+	if err := checkRecipients(newCfg, kept); err != nil {
+		return err
+	}
+	for _, target := range keysTargets(newCfg) {
+		secrets := newCfg.Environments[target].Secrets
+		if _, err := os.Stat(secrets); os.IsNotExist(err) {
+			continue
+		}
+		if len(newCfg.SecretsRecipientKeys(secrets)) == 0 {
+			return fmt.Errorf("cannot remove %q: environment %q would have no recipients left", name, target)
+		}
+	}
+
+	if err := syncAndSave(cfg, newCfg, newBytes); err != nil {
+		return err
+	}
 	fmt.Printf("Removed recipient %q\n", name)
-
-	return updateSecretsKeys(cfg)
+	if files := filesStillOpenTo(newCfg, removedKey); len(files) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: another recipient has the same key, so it can still decrypt: %s\n", strings.Join(files, ", "))
+	}
+	fmt.Fprintln(os.Stderr, "Warning: the removed key can still decrypt older versions of these files from git history. Rotate the secret values themselves to fully revoke access.")
+	return nil
 }
 
-// writeSopsConfig writes a .sops.yaml file so that sops updatekeys knows
-// which age recipients to apply. This is the only mechanism sops uses to
-// determine the desired recipient list during updatekeys.
-func writeSopsConfig(keys []string, configDir string) (string, error) {
-	path := filepath.Join(configDir, ".sops.yaml")
-	content := fmt.Sprintf("creation_rules:\n  - age: >-\n      %s\n", strings.Join(keys, ","))
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // config file
-		return "", fmt.Errorf("cannot write .sops.yaml: %w", err)
+func filesStillOpenTo(cfg *config.Config, key string) []string {
+	var out []string
+	for _, file := range keysTargetFiles(cfg) {
+		if slices.Contains(cfg.SecretsRecipientKeys(file), key) {
+			out = append(out, file)
+		}
 	}
-	return path, nil
+	return out
 }
 
-// updateSecretsKeys runs sops updatekeys on all existing encrypted files.
-func updateSecretsKeys(cfg *config.Config) error {
-	keys := cfg.AgeRecipientKeys()
-	if len(keys) == 0 {
-		fmt.Println("No recipients left — skipping sops updatekeys")
-		return nil
+func scopeOf(env string) string {
+	if env == "" {
+		return config.ScopeGlobal
 	}
+	return env
+}
 
+// checkRecipients guards against line edits that YAML reads back differently, such as a name parsed as null.
+func checkRecipients(newCfg *config.Config, want []config.Recipient) error {
+	got, err := newCfg.Recipients("")
+	if err != nil {
+		return err
+	}
+	count := map[config.Recipient]int{}
+	for _, r := range want {
+		count[r]++
+	}
+	for _, r := range got {
+		count[r]--
+	}
+	for _, n := range count {
+		if n != 0 {
+			return fmt.Errorf("refusing to write %s: the edit did not produce the expected recipients", config.DefaultConfigFile)
+		}
+	}
+	return nil
+}
+
+func keysTargets(cfg *config.Config) []string {
+	if envName != "" {
+		return []string{envName}
+	}
+	return cfg.EnvNames()
+}
+
+func keysTargetFiles(cfg *config.Config) []string {
+	seen := map[string]bool{}
+	var files []string
+	for _, target := range keysTargets(cfg) {
+		file := filepath.Clean(cfg.Environments[target].Secrets)
+		if canonical := config.CanonicalPath(file); !seen[canonical] {
+			seen[canonical] = true
+			files = append(files, file)
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
+// syncAndSave re-keys every targeted secrets file for all environments sharing it, then writes .envctl.yaml last so a failure leaves it untouched.
+func syncAndSave(cfg, newCfg *config.Config, newBytes []byte) error {
 	sopsPath, err := exec.LookPath("sops")
 	if err != nil {
 		return fmt.Errorf("sops is not installed or not in PATH\n\n  Fix: brew install sops")
 	}
 
-	// Write .sops.yaml next to .envctl.yaml so sops updatekeys picks it up
-	configDir := filepath.Dir(cfg.ConfigPath())
-	sopsConfigPath, err := writeSopsConfig(keys, configDir)
+	var pending, undecryptable, foreign []string
+	upToDate := 0
+	for _, file := range keysTargetFiles(newCfg) {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			continue
+		}
+		sources, err := sopskeys.ForeignKeySources(file)
+		if err != nil {
+			return fmt.Errorf("%w; nothing was changed", err)
+		}
+		if len(sources) > 0 {
+			foreign = append(foreign, fmt.Sprintf("  %s: %s", file, strings.Join(sources, ", ")))
+			continue
+		}
+		decryptErr := sopskeys.CanDecrypt(sopsPath, file)
+		if decryptErr == nil {
+			pending = append(pending, file)
+			continue
+		}
+		// Recipient labels are not authenticated, so they only justify a skip when the operator can no longer decrypt (re-run after removing their own key).
+		if current, err := sopskeys.FileRecipients(file); err == nil && slices.Equal(current, newCfg.SecretsRecipientKeys(file)) {
+			fmt.Printf("%s already up to date\n", file)
+			fmt.Fprintf(os.Stderr, "Warning: %s was not rotated because your key cannot decrypt it, so its data key is unchanged. A remaining recipient should re-run this command to rotate it.\n", file)
+			upToDate++
+			continue
+		}
+		undecryptable = append(undecryptable, fmt.Sprintf("  %s: %v", file, decryptErr))
+	}
+	if len(foreign) > 0 {
+		return fmt.Errorf("refusing to re-key: these secrets files list key sources other than age, which would receive the new data key; nothing was changed — remove them from the file's sops metadata and re-run:\n%s", strings.Join(foreign, "\n"))
+	}
+	if len(undecryptable) > 0 {
+		return fmt.Errorf("cannot decrypt these secrets files with your age key; nothing was changed — run this command as a recipient of every targeted file:\n%s", strings.Join(undecryptable, "\n"))
+	}
+
+	var done []string
+	for _, file := range pending {
+		if err := sopskeys.Sync(sopsPath, file, newCfg.SecretsRecipientKeys(file)); err != nil {
+			return fmt.Errorf("re-keyed %s (and possibly %s) before failing; .envctl.yaml was not modified — fix the error and re-run the same command: %w", doneList(done), file, err)
+		}
+		done = append(done, file)
+	}
+
+	if err := writeFileAtomic(cfg.ConfigPath(), newBytes); err != nil {
+		if len(done) == 0 {
+			return fmt.Errorf("cannot write config %s: %w", cfg.ConfigPath(), err)
+		}
+		return fmt.Errorf("re-keyed %s but cannot write config %s — fix the error and re-run the same command: %w", doneList(done), cfg.ConfigPath(), err)
+	}
+
+	switch {
+	case len(done) > 0:
+		fmt.Printf("Updated keys in %d secrets file(s)\n", len(done))
+	case upToDate == 0:
+		fmt.Println("No encrypted secrets files found — keys will apply on next edit")
+	}
+	return nil
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	// Resolve symlinks so the rename replaces the target file, not the link.
+	target, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return err
 	}
-
-	updated := 0
-
-	for envName, env := range cfg.Environments {
-		if _, err := os.Stat(env.Secrets); os.IsNotExist(err) {
-			continue
+	info, err := os.Stat(target)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	renamed := false
+	defer func() {
+		if !renamed {
+			os.Remove(tmp.Name()) //nolint:errcheck,gosec // best-effort cleanup
 		}
-
-		sopsCmd := exec.Command(sopsPath, "updatekeys", "--yes", env.Secrets) //nolint:gosec // sops from LookPath, args from config
-		sopsCmd.Stderr = os.Stderr
-		if err := sopsCmd.Run(); err != nil {
-			return fmt.Errorf("sops updatekeys failed for %s (%s): %w", envName, env.Secrets, err)
-		}
-		updated++
+	}()
+	if err := tmp.Chmod(info.Mode().Perm()); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
 	}
-
-	if updated > 0 {
-		fmt.Printf("Updated keys in %d secrets file(s)\n", updated)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
 	}
-
-	// Clean up .sops.yaml — envctl owns recipient config via .envctl.yaml
-	os.Remove(sopsConfigPath) //nolint:errcheck,gosec // best-effort cleanup
-
-	if updated == 0 {
-		fmt.Println("No encrypted secrets files found — keys will apply on next edit")
+	if err := tmp.Sync(); err != nil {
+		tmp.Close() //nolint:errcheck,gosec // already failing
+		return err
 	}
-
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), target); err != nil {
+		return err
+	}
+	renamed = true
 	return nil
+}
+
+func doneList(done []string) string {
+	if len(done) == 0 {
+		return "no files"
+	}
+	return strings.Join(done, ", ")
 }

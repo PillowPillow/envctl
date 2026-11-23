@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/PillowPillow/envctl/cmd"
+	"github.com/PillowPillow/envctl/v2/cmd"
 )
 
 var version = "dev"

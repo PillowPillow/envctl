@@ -3,7 +3,7 @@ package resolver
 import (
 	"fmt"
 
-	"github.com/PillowPillow/envctl/internal/template"
+	"github.com/PillowPillow/envctl/v2/internal/template"
 )
 
 // Options configures the resolution process.

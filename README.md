@@ -55,7 +55,7 @@ docker pull ghcr.io/pillowpillow/envctl:latest
 ### From source
 
 ```bash
-go install github.com/PillowPillow/envctl@latest
+go install github.com/PillowPillow/envctl/v2@latest
 ```
 
 ### Prerequisites
@@ -100,7 +100,7 @@ Copy the public key (starts with `age1...`) and register it:
 envctl keys add your-name age1ql3z7hjy54pw3hyww5ayf...
 ```
 
-This adds the key to `.envctl.yaml` and re-encrypts any existing secrets files.
+This adds the key to `.envctl.yaml` and re-encrypts any existing secrets files. To give the key access to one environment only, add `--env <name>`.
 
 ### 3. Create your secrets file
 
@@ -158,6 +158,8 @@ template: .env.example
 environments:
   local:
     secrets: .envctl/secrets.local.enc.yaml
+    age_recipients:       # optional: added to the global recipients, this env only
+      dev: age1xyz789...
     overrides:
       APP_ENV: local
       APP_DEBUG: "true"
@@ -189,6 +191,26 @@ sops:
     alice: age1ql3z7hjy54pw3hyww5ayf...
     ci: age1abc123...
 ```
+
+### `environments.<env>.age_recipients`
+
+Optional named map of age public keys that can decrypt **this environment's** secrets file only. It is additive: the recipients of an environment are the global `sops.age_recipients` plus the ones listed here.
+
+```yaml
+environments:
+  local:
+    secrets: .envctl/secrets.local.enc.yaml
+    age_recipients:
+      dev: age1xyz789...
+```
+
+A recipient name uses letters, digits, `.`, `_` or `-` and starts with a letter or a digit. The same name may appear in several environments (for example a `dev` key per environment), but never both globally and in an environment: `envctl keys add` refuses a global name that already exists in any scope, and an `--env <name>` add refuses a name that is global or already in that environment. A name that is both global and in an environment (for example after a manual edit) is rejected when the config loads, so every command fails until the duplicate is removed. A config without per-environment `age_recipients` behaves as before. The environment name `global` is reserved for the global recipients (it is the `SCOPE` shown by `keys list`) and is rejected when the config loads.
+
+When several environments point to the same `secrets` file, that file is encrypted for the union of their recipients: a key added to one of them with `--env` can decrypt the shared file, and so the other environments' secrets too.
+
+### Path resolution
+
+`secrets` paths are resolved from the folder that contains `.envctl.yaml`, not from the current directory, so every command behaves the same wherever you run it from inside the project. `template` and `output` paths stay relative to the current directory.
 
 ### Substitution priority
 
@@ -249,13 +271,18 @@ Comparing staging -> production:
 
 ### `envctl keys`
 
-Manage age encryption recipients:
+Manage age encryption recipients. Without `--env` the command targets the global recipients (all environments); with `--env <name>` it targets one environment:
 
 ```bash
-envctl keys list                    # List configured recipients
-envctl keys add <name> <age1...>    # Add recipient + re-encrypt secrets
-envctl keys remove <name>           # Remove recipient + re-encrypt secrets
+envctl keys list                              # List all recipients, with their scope
+envctl keys list --env production             # List the effective recipients of production
+envctl keys add <name> <age1...>              # Add a global recipient + re-encrypt all secrets files
+envctl keys add <name> <age1...> --env local  # Add a recipient to local only + re-encrypt its file
+envctl keys remove <name>                     # Remove a global recipient + re-encrypt all secrets files
+envctl keys remove <name> --env local         # Remove a recipient from local only
 ```
+
+`keys list` prints `NAME`, `KEY` and `SCOPE` columns (`global` or the environment name). Every `add` and `remove` re-keys and rotates the affected secrets files.
 
 ### `envctl edit`
 
@@ -368,6 +395,15 @@ envctl keys add alice age1ql3z7hjy54pw3hyww5ayf...
 
 This adds the key to `.envctl.yaml` and re-encrypts all secrets files automatically.
 
+### Scope a recipient to one environment
+
+```bash
+envctl keys add dev age1xyz789... --env local
+envctl keys list --env local
+```
+
+`dev` can now decrypt `local` only; the global recipients still can. A global recipient cannot be removed from a single environment: `envctl keys remove <name> --env <env>` fails and tells you to remove it without `--env`.
+
 ### Add a CI key
 
 ```bash
@@ -380,7 +416,34 @@ envctl keys add ci age1abc123...
 ```bash
 envctl keys list
 envctl keys remove alice
+envctl keys remove dev --env local
 ```
+
+envctl refuses a removal that would leave an environment whose secrets file exists with no recipients (`cannot remove "<name>": environment "<env>" would have no recipients left`) and changes nothing. While an environment has no secrets file yet, you can remove its last recipient, for example to fix a wrong key right after `envctl init`; `envctl edit` then refuses to create the file until a recipient is added.
+
+### Re-encryption and git history
+
+- Every `keys add` and `keys remove` rotates the data key of each affected file, so **the whole file changes in git**, not only the recipient block. Expect a full diff on review.
+- Rotation does not rewrite git history. A removed key can still decrypt older versions of the files from history, and `keys remove` prints a warning saying so. To fully revoke access, also change the secret values themselves.
+- Before changing anything, `keys add|remove` checks that your age key can decrypt every targeted secrets file. If one cannot be decrypted, the command lists it and changes nothing: run it as a recipient of every targeted file (for a global change, someone who holds every environment's key).
+- `keys add|remove` only manages files whose sops metadata lists age recipients alone. A file that also lists another key source (`hc_vault`, `kms`, `gcp_kms`, `azure_kv`, `pgp`, `key_groups`…) is refused before anything changes, because rotating it would hand the new data key to that source. Remove the extra source with sops, then re-run.
+- If re-keying still fails part-way, `.envctl.yaml` is left untouched and the error lists the files already re-keyed. Fix the cause and re-run the same command: a file you can no longer decrypt (because you removed your own key) and that already has the expected recipients is reported as already up to date and skipped, with a warning that its data key was not rotated; a remaining recipient should re-run the command to rotate it. Every file you can decrypt is rotated again.
+
+## Upgrading from v1
+
+v2 is a major release because every `keys add|remove` now re-keys and rotates the secrets files, and `secrets` paths are resolved from the `.envctl.yaml` folder instead of the current directory. There is no config migration: an existing `.envctl.yaml` keeps working and keeps the same recipients, with one caveat.
+
+Recipient names are now validated when the config loads: letters, digits, `.`, `_` or `-`, starting with a letter or a digit. A v1 config with any other name (for example `alice smith` or `@ci`) fails to load, so every command that reads it (`verify`, `generate`, `diff`, `edit`, `keys`) fails until you rename it in `.envctl.yaml` by hand. The same applies to an environment named `global`, which is now reserved. Recipient keys are validated as well: each must be a single `age1…` recipient with a valid bech32 checksum, so a mistyped key or a comma-separated list in one value fails to load.
+
+The GitHub Action pulls the `latest` image by default (`envctl-version: latest`), so consumer workflows move to v2 as soon as it is released. Pin `envctl-version` to a v1 tag if you need time to check your config.
+
+The Go module path changed, so install with the `/v2` path:
+
+```bash
+go install github.com/PillowPillow/envctl/v2@latest
+```
+
+Install script, Docker image and `envctl update` are unchanged.
 
 ## Development
 
