@@ -204,7 +204,9 @@ environments:
       dev: age1xyz789...
 ```
 
-A recipient name must be unique across all scopes: `envctl keys add` refuses a name that already exists in any scope. A name that is both global and in an environment (for example after a manual edit) is rejected when the config loads, so every command fails until the duplicate is removed. A config without per-environment `age_recipients` behaves as before.
+A recipient name uses letters, digits, `.`, `_` or `-` and starts with a letter or a digit. The same name may appear in several environments (for example a `dev` key per environment), but never both globally and in an environment: `envctl keys add` refuses a global name that already exists in any scope, and an `--env <name>` add refuses a name that is global or already in that environment. A name that is both global and in an environment (for example after a manual edit) is rejected when the config loads, so every command fails until the duplicate is removed. A config without per-environment `age_recipients` behaves as before.
+
+When several environments point to the same `secrets` file, that file is encrypted for the union of their recipients: a key added to one of them with `--env` can decrypt the shared file, and so the other environments' secrets too.
 
 ### Path resolution
 
@@ -423,11 +425,15 @@ envctl refuses a removal that would leave an environment with no recipients (`ca
 
 - Every `keys add` and `keys remove` rotates the data key of each affected file, so **the whole file changes in git**, not only the recipient block. Expect a full diff on review.
 - Rotation does not rewrite git history. A removed key can still decrypt older versions of the files from history, and `keys remove` prints a warning saying so. To fully revoke access, also change the secret values themselves.
-- If re-keying fails part-way, `.envctl.yaml` is left untouched and the error lists the files already re-keyed. Fix the cause and re-run the same command.
+- If re-keying fails part-way, `.envctl.yaml` is left untouched and the error lists the files already re-keyed. Fix the cause and re-run the same command: files that already have the expected recipients are reported as already up to date and skipped.
 
 ## Upgrading from v1
 
-v2 is a major release because every `keys add|remove` now re-keys and rotates the secrets files, and `secrets` paths are resolved from the `.envctl.yaml` folder instead of the current directory. There is no config migration: an existing `.envctl.yaml` keeps working and keeps the same recipients.
+v2 is a major release because every `keys add|remove` now re-keys and rotates the secrets files, and `secrets` paths are resolved from the `.envctl.yaml` folder instead of the current directory. There is no config migration: an existing `.envctl.yaml` keeps working and keeps the same recipients, with one caveat.
+
+Recipient names are now validated when the config loads: letters, digits, `.`, `_` or `-`, starting with a letter or a digit. A v1 config with any other name (for example `alice smith` or `@ci`) fails to load, so every command that reads it (`verify`, `generate`, `diff`, `edit`, `keys`) fails until you rename it in `.envctl.yaml` by hand.
+
+The GitHub Action pulls the `latest` image by default (`envctl-version: latest`), so consumer workflows move to v2 as soon as it is released. Pin `envctl-version` to a v1 tag if you need time to check your config.
 
 The Go module path changed, so install with the `/v2` path:
 
