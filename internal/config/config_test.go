@@ -212,3 +212,27 @@ func TestValidRecipientName(t *testing.T) {
 		assert.Error(t, ValidRecipientName(name), name)
 	}
 }
+
+func TestSave_KeepsRelativeSecretsPaths(t *testing.T) {
+	dir := t.TempDir()
+	abs := filepath.Join(dir, "elsewhere", "abs.enc.yaml")
+	content := `version: "1"
+template: .env.example
+environments:
+  local:
+    secrets: .envctl/s.enc.yaml
+  other:
+    secrets: ` + abs + `
+`
+	path := filepath.Join(dir, ".envctl.yaml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.NoError(t, cfg.Save())
+
+	raw, err := os.ReadFile(path) //nolint:gosec // test temp path
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "secrets: .envctl/s.enc.yaml")
+	assert.Contains(t, string(raw), "secrets: "+abs)
+}

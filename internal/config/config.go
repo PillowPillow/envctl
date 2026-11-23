@@ -17,6 +17,7 @@ type Config struct {
 	SOPS         SOPSConfig             `yaml:"sops"`
 
 	configPath string // set by Load, used by Save
+	rawSecrets map[string]string
 }
 
 type Environment struct {
@@ -73,7 +74,9 @@ func Parse(data []byte, path string) (*Config, error) {
 
 	cfg.configPath = path
 	dir := filepath.Dir(path)
+	cfg.rawSecrets = make(map[string]string, len(cfg.Environments))
 	for name, env := range cfg.Environments {
+		cfg.rawSecrets[name] = env.Secrets
 		if !filepath.IsAbs(env.Secrets) {
 			env.Secrets = filepath.Join(dir, env.Secrets)
 			cfg.Environments[name] = env
@@ -148,7 +151,15 @@ func (c *Config) Save() error {
 	if c.configPath == "" {
 		return fmt.Errorf("config path not set (config was not loaded from a file)")
 	}
-	data, err := yaml.Marshal(c)
+	out := *c
+	out.Environments = make(map[string]Environment, len(c.Environments))
+	for name, env := range c.Environments {
+		if raw, ok := c.rawSecrets[name]; ok {
+			env.Secrets = raw
+		}
+		out.Environments[name] = env
+	}
+	data, err := yaml.Marshal(&out)
 	if err != nil {
 		return fmt.Errorf("cannot marshal config: %w", err)
 	}
