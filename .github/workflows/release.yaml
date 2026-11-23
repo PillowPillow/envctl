@@ -31,6 +31,19 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.54.0/install.sh | sh -s -- -b /usr/local/bin v1.54.0
 
+      - name: Install age and sops
+        # Keep SOPS_VERSION and SOPS_SHA256 in sync with ci.yaml and the Dockerfile (ARG SOPS_VERSION / SOPS_SHA256_AMD64).
+        env:
+          SOPS_VERSION: "3.13.3"
+          SOPS_SHA256: "e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age
+          curl -fsSLo sops "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.amd64"
+          echo "${SOPS_SHA256}  sops" | sha256sum -c -
+          sudo install -m 0755 sops /usr/local/bin/sops
+          rm sops
+
       - name: Run tests
         run: go test -race -count=1 ./...
 
