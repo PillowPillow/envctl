@@ -30,15 +30,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Install syft (SBOM)
         env:
-          SYFT_VERSION: "1.54.0"
-          SYFT_SHA256: "54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860"
+          SYFT_VERSION: "1.57.2"
+          SYFT_SHA256: "ad92bd3ec1b94a3df01d4d0aec199afa9c42b72e86da436ff5f837914d32706b"
         run: |
           curl -fsSLo syft.tar.gz "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
           echo "${SYFT_SHA256}  syft.tar.gz" | sha256sum -c -
@@ -62,7 +62,7 @@ jobs:
       - name: Run tests
         run: go test -race -count=1 ./...
 
-      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: "~> v2"
           args: release --clean
@@ -100,7 +100,7 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -187,7 +187,7 @@ jobs:
           grep -F "Provenance verified." "$RUNNER_TEMP/curl.log"
           "$RUNNER_TEMP/curl/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
           cache: false
