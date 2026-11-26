@@ -21,6 +21,8 @@ var rootCmd = &cobra.Command{
 	Use:   "envctl",
 	Short: "Environment configuration manager with SOPS encryption",
 	Long:  `envctl manages environment variables across projects, with secret encryption via SOPS/age.`,
+
+	SilenceUsage: true,
 }
 
 // Run executes the root command and prints any update notification.
