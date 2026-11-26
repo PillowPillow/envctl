@@ -29,7 +29,7 @@ jobs:
         run: go mod verify
 
       - name: shellcheck
-        run: shellcheck install.sh
+        run: shellcheck install.sh homebrew/render-formula.sh
 
       - name: Check go.mod tidiness
         run: |
