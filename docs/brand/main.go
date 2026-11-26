@@ -18,6 +18,8 @@ var visuals = []visual{
 	{"logo", renderLogo},
 	{"logo-32", renderMarkOnly(32)},
 	{"logo-16", renderMarkOnly(16)},
+	{"hero", renderHero},
+	{"social", renderSocial},
 }
 
 func generate(srcDir, outDir string) error {
