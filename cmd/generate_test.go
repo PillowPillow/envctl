@@ -34,3 +34,21 @@ func TestGenerate_DevKeyOnly(t *testing.T) {
 	_, statErr := os.Stat(prodOut)
 	assert.True(t, os.IsNotExist(statErr))
 }
+
+func TestGenerate_StrictUnusedSecretIsNotReportedAsMissing(t *testing.T) {
+	p := setupProject(t)
+	require.NoError(t, os.WriteFile(filepath.Join(p.Dir, ".env.example"), []byte("API_URL=https://example.test\n"), 0o644)) //nolint:gosec // test file
+
+	_, _, err := runCLI(t, "--env", "local", "generate", "--strict", "--output", filepath.Join(t.TempDir(), ".env"))
+	require.Error(t, err)
+	assert.Equal(t, "1 unused secret(s) in strict mode", err.Error())
+}
+
+func TestGenerate_StrictMissingAndUnusedAreCountedSeparately(t *testing.T) {
+	p := setupProject(t)
+	require.NoError(t, os.WriteFile(filepath.Join(p.Dir, ".env.example"), []byte("OTHER=${OTHER}\n"), 0o644)) //nolint:gosec // test file
+
+	_, _, err := runCLI(t, "--env", "local", "generate", "--strict", "--output", filepath.Join(t.TempDir(), ".env"))
+	require.Error(t, err)
+	assert.Equal(t, "1 missing required secret(s), 1 unused secret(s) in strict mode", err.Error())
+}
