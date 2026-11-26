@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 )
 
-type inputs struct{}
+type inputs struct {
+	verifyTranscript string
+}
 
 type visual struct {
 	stem   string
@@ -20,10 +22,18 @@ var visuals = []visual{
 	{"logo-16", renderMarkOnly(16)},
 	{"hero", renderHero},
 	{"social", renderSocial},
+	{"verify", renderVerifyVisual},
+	{"flow", renderFlow},
+	{"classes", renderClasses},
+	{"access", renderAccess},
 }
 
 func generate(srcDir, outDir string) error {
-	var in inputs
+	transcript, err := os.ReadFile(filepath.Join(srcDir, "verify.txt")) //nolint:gosec // source dir comes from the maintainer's command line
+	if err != nil {
+		return err
+	}
+	in := inputs{verifyTranscript: string(transcript)}
 	if err := os.MkdirAll(outDir, 0o755); err != nil { //nolint:gosec // output dir comes from the maintainer's command line
 		return err
 	}
