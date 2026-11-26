@@ -20,3 +20,26 @@ func TestUnknownFlag_StillReportsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, stderr, "Error: unknown flag: --no-such-flag")
 }
+
+func TestBackgroundUpdateCheckEnabled_RespectsOptOut(t *testing.T) {
+	prevVersion, prevGo := appVersion, installedWithGo
+	t.Cleanup(func() { appVersion, installedWithGo = prevVersion, prevGo })
+	appVersion, installedWithGo = "2.1.1", false
+
+	cases := []struct {
+		value string
+		want  bool
+	}{
+		{"", true},
+		{"1", false},
+		{"true", false},
+		{"0", true},
+		{"false", true},
+	}
+	for _, tc := range cases {
+		t.Run("ENVCTL_NO_UPDATE_CHECK="+tc.value, func(t *testing.T) {
+			t.Setenv("ENVCTL_NO_UPDATE_CHECK", tc.value)
+			assert.Equal(t, tc.want, backgroundUpdateCheckEnabled())
+		})
+	}
+}
