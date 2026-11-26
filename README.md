@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-GPL--3.0-B4472E" alt="GPL-3.0 license">
-  <img src="https://img.shields.io/badge/release-v2.1.0-B4472E" alt="Latest release v2.1.0">
+  <img src="https://img.shields.io/badge/release-v2.1.1-B4472E" alt="Latest release v2.1.1">
   <img src="https://img.shields.io/badge/go-1.27-B4472E" alt="Built with Go 1.27">
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux-B4472E" alt="Runs on macOS and Linux">
 </p>
@@ -72,7 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh
 The script installs the latest release in `~/.envctl/bin` and checks its sha256 checksum; if the [GitHub CLI](https://cli.github.com) is signed in, it also verifies that the archive was built by this repository's release workflow. [Read `install.sh`](install.sh) before you run it. To pin a version, pass it to `bash`, not to `curl` (`INSTALL_DIR` works the same way):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | ENVCTL_VERSION=v2.1.0 bash
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | ENVCTL_VERSION=v2.1.1 bash
 ```
 
 envctl runs on macOS and Linux, on amd64 and arm64.
@@ -93,7 +93,7 @@ You need `sops` and `age` on your `PATH` as well.
 The image bundles envctl, sops and age:
 
 ```sh
-docker run --rm -v "$PWD:/workspace" -e SOPS_AGE_KEY ghcr.io/pillowpillow/envctl:2.1.0 verify --env production
+docker run --rm -v "$PWD:/workspace" -e SOPS_AGE_KEY ghcr.io/pillowpillow/envctl:2.1.1 verify --env production
 ```
 </details>
 
@@ -146,11 +146,11 @@ A key added without `--env` is global: it opens every environment. Environments 
 The composite action runs envctl from its Docker image; CI needs only one age private key, stored as the `SOPS_AGE_KEY` secret.
 
 ```yaml
-- uses: PillowPillow/envctl@v2.1.0
+- uses: PillowPillow/envctl@v2.1.1
   with:
     command: verify
     environment: production
-    envctl-version: 2.1.0
+    envctl-version: 2.1.1
   env:
     SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 ```
