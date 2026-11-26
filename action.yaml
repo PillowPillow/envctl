@@ -27,11 +27,8 @@ runs:
     - name: Pull envctl image
       shell: bash
       env:
-        GHCR_TOKEN: ${{ github.token }}
         ENVCTL_IMAGE_TAG: ${{ inputs.envctl-version }}
-      run: |
-        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-        docker pull "ghcr.io/pillowpillow/envctl:${ENVCTL_IMAGE_TAG}"
+      run: docker pull "ghcr.io/pillowpillow/envctl:${ENVCTL_IMAGE_TAG}"
 
     - name: Run envctl verify
       if: inputs.command == 'verify'
