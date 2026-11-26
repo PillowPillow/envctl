@@ -63,7 +63,7 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "Error: %s: %s\n", d.Variable, d.Message)
 			}
 		}
-		return fmt.Errorf("%d missing required secret(s)", rs.ErrorCount())
+		return strictFailure(rs)
 	}
 
 	output := parser.Render(parsed, rs.Values())
@@ -84,4 +84,22 @@ func runGenerate(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(os.Stderr, "Generated %s for environment %q\n", dest, envName)
 	return nil
+}
+
+func strictFailure(rs *resolver.ResolvedSet) error {
+	missing := 0
+	for _, v := range rs.Vars {
+		if v.Status == resolver.StatusMissing {
+			missing++
+		}
+	}
+	unused := len(rs.Unused)
+	switch {
+	case unused == 0:
+		return fmt.Errorf("%d missing required secret(s)", missing)
+	case missing == 0:
+		return fmt.Errorf("%d unused secret(s) in strict mode", unused)
+	default:
+		return fmt.Errorf("%d missing required secret(s), %d unused secret(s) in strict mode", missing, unused)
+	}
 }
