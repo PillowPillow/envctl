@@ -49,7 +49,7 @@ Keys of an environment:
 
 ## Templates
 
-The template is usually `.env.example`, but any text file works: files whose name starts with `.env` are read as dotenv, every other file is treated as plain text where each `${VAR}` or `${VAR:-default}` placeholder is substituted.
+The template is usually `.env.example`, but any text file works: files whose name contains `.env` (`.env.example`, `app.env.yaml`) are read as dotenv, every other file is treated as plain text where each `${VAR}` or `${VAR:-default}` placeholder is substituted.
 
 | Line in the template | Kind | Behaviour |
 |---|---|---|

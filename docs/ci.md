@@ -63,6 +63,14 @@ jobs:
     secrets: inherit
 ```
 
+Workflow inputs:
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `environment` | yes | | Environment to verify |
+| `github-environment` | yes | | GitHub environment that holds `SOPS_AGE_KEY` |
+| `envctl-version` | no | `latest` | Docker image tag, without the `v` |
+
 The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored.
 
 ## Docker, anywhere else

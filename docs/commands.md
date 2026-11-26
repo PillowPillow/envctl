@@ -28,6 +28,8 @@ envctl verify --env production
 envctl verify --env production --strict  # treat warnings as errors (auto-enabled when CI=true)
 ```
 
+A warning is a value in the secrets file that the template does not use. With `--strict` it fails the check like a missing variable.
+
 ## `envctl generate`
 
 Produce a `.env` file from template + secrets + overrides:
@@ -39,7 +41,7 @@ envctl generate --env local              # writes the environment's `output`, or
 envctl generate --env local --dry-run    # print to stdout, write nothing
 ```
 
-`--strict` fails when a required variable has no value instead of writing it empty; it is on automatically when `CI=true`. The file is written with mode `0600`.
+`--strict` refuses to write the file when a required variable has no value, and also when the secrets file holds a value the template does not use (add the template line before the secret, or both in one commit). It is on automatically when `CI=true`. The file is written with mode `0600`.
 
 ## `envctl diff`
 
@@ -91,14 +93,14 @@ envctl keys remove <name> --env local         # Remove a recipient from local on
 
 ## `envctl update`
 
-Replace the binary with the latest release. It applies to installs made with the install script; the other install methods have their own upgrade path, and `envctl update` tells you which:
+Replace the binary with the latest release. It applies to installs made with the install script; the other install methods have their own upgrade path. For Homebrew and `go install`, `envctl update` prints the command to run instead.
 
 | Installed with | Upgrade with |
 |---|---|
 | install script | `envctl update` |
 | Homebrew | `brew upgrade envctl` |
 | `go install` | `go install github.com/PillowPillow/envctl/v2@latest` |
-| Docker | pull a newer image tag |
+| Docker | pull a newer image tag (do not run `envctl update` in a container) |
 
 When it was installed with the install script, envctl also checks for a new release in the background once in a while and prints a one-line notice after the command output.
 

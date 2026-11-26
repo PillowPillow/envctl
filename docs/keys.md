@@ -5,14 +5,17 @@ Each person and each CI runner has its own [age](https://github.com/FiloSottile/
 ## Add a team member
 
 ```bash
-# They generate a key pair
-age-keygen -o ~/.config/sops/age/keys.txt
+# They generate a key pair and tell sops where it is
+mkdir -p ~/.config/sops/age && age-keygen -o ~/.config/sops/age/keys.txt
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
 
 # They share their public key, you add it
 envctl keys add alice age1ql3z7hjy54pw3hyww5ayf...
 ```
 
 This adds the key to `.envctl.yaml` and re-encrypts all secrets files automatically.
+
+Without `SOPS_AGE_KEY_FILE`, sops reads `$XDG_CONFIG_HOME/sops/age/keys.txt`, which defaults to `~/.config/sops/age/keys.txt` on Linux and `~/Library/Application Support/sops/age/keys.txt` on macOS.
 
 ## Scope a recipient to one environment
 
