@@ -236,8 +236,9 @@ func TestValidRecipientName(t *testing.T) {
 }
 
 func TestSecretsRecipientKeys_UnionOfEnvironmentsSharingAFile(t *testing.T) {
-	content := strings.Replace(perEnvConfig, "  production:\n",
-		"  e2e:\n    secrets: ./.envctl/../.envctl/local.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n      dup: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n  production:\n", 1)
+	content := strings.Replace(perEnvConfig, "  local:\n", "  local:\n    shared: true\n", 1)
+	content = strings.Replace(content, "  production:\n",
+		"  e2e:\n    shared: true\n    secrets: ./.envctl/../.envctl/local.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n      dup: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n  production:\n", 1)
 	cfg := parseConfig(t, content)
 
 	local, err := cfg.GetEnvironment("local")
@@ -297,4 +298,48 @@ func TestLoad_SameRecipientNameInTwoEnvs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh", Scope: "local"})
 	assert.Contains(t, recipients, Recipient{Name: "dev", Key: "age16qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqhn87p5", Scope: "production"})
+}
+
+const e2eSharingLocal = "  e2e:\n    secrets: .envctl/local.enc.yaml\n    age_recipients:\n      vm2: age17qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdvjpzr\n  production:\n"
+
+func TestParse_SharedSecretsWithDifferentRecipientsIsRejected(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n", e2eSharingLocal, 1)
+	_, err := Parse([]byte(content), filepath.Join(t.TempDir(), ".envctl.yaml"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `environments "e2e" and "local" share secrets file .envctl/local.enc.yaml with different age_recipients`)
+	assert.Contains(t, err.Error(), "shared: true")
+}
+
+func TestParse_SymlinkToAnotherEnvironmentsSecretsIsRejected(t *testing.T) {
+	dir := t.TempDir()
+	envctlDir := filepath.Join(dir, ".envctl")
+	require.NoError(t, os.MkdirAll(envctlDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(envctlDir, "production.enc.yaml"), []byte("{}\n"), 0o600))
+	require.NoError(t, os.Symlink("production.enc.yaml", filepath.Join(envctlDir, "local.enc.yaml")))
+
+	_, err := Parse([]byte(perEnvConfig), filepath.Join(dir, ".envctl.yaml"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `environments "local" and "production" share secrets file`)
+}
+
+func TestParse_SharedSecretsWithSameRecipientsIsAccepted(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n",
+		"  e2e:\n    secrets: .envctl/local.enc.yaml\n    age_recipients:\n      dev: age13qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq4x4tvh\n  production:\n", 1)
+	_, err := Parse([]byte(content), filepath.Join(t.TempDir(), ".envctl.yaml"))
+	assert.NoError(t, err)
+}
+
+func TestParse_SharedSecretsDeclaredSharedOnEveryEnvironmentIsAccepted(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n", strings.Replace(e2eSharingLocal, "    secrets:", "    shared: true\n    secrets:", 1), 1)
+	content = strings.Replace(content, "    secrets: .envctl/local.enc.yaml\n    age_recipients:\n      dev:", "    shared: true\n    secrets: .envctl/local.enc.yaml\n    age_recipients:\n      dev:", 1)
+	cfg, err := Parse([]byte(content), filepath.Join(t.TempDir(), ".envctl.yaml"))
+	require.NoError(t, err)
+	assert.True(t, cfg.Environments["local"].Shared)
+}
+
+func TestParse_SharedDeclaredOnOnlyOneEnvironmentIsRejected(t *testing.T) {
+	content := strings.Replace(perEnvConfig, "  production:\n", strings.Replace(e2eSharingLocal, "    secrets:", "    shared: true\n    secrets:", 1), 1)
+	_, err := Parse([]byte(content), filepath.Join(t.TempDir(), ".envctl.yaml"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `environments "e2e" and "local" share secrets file`)
 }

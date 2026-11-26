@@ -253,9 +253,25 @@ func TestKeysList_Scopes(t *testing.T) {
 
 func shareLocalSecrets(t *testing.T, p project, env string) {
 	t.Helper()
-	cfg := strings.Replace(string(readFile(t, p.ConfigPath)), "sops:\n",
-		"  "+env+":\n    secrets: .envctl/local.enc.yaml\n    output: .env."+env+"\nsops:\n", 1)
+	cfg := strings.Replace(string(readFile(t, p.ConfigPath)), "  local:\n", "  local:\n    shared: true\n", 1)
+	cfg = strings.Replace(cfg, "sops:\n",
+		"  "+env+":\n    shared: true\n    secrets: .envctl/local.enc.yaml\n    output: .env."+env+"\nsops:\n", 1)
 	require.NoError(t, os.WriteFile(p.ConfigPath, []byte(cfg), 0o644)) //nolint:gosec // test file
+}
+
+func TestKeysAdd_EnvScoped_UndeclaredSharedFileIsRefused(t *testing.T) {
+	p := setupProject(t)
+	cfg := strings.Replace(string(readFile(t, p.ConfigPath)), "sops:\n",
+		"  e2e:\n    secrets: .envctl/local.enc.yaml\n    output: .env.e2e\nsops:\n", 1)
+	require.NoError(t, os.WriteFile(p.ConfigPath, []byte(cfg), 0o644)) //nolint:gosec // test file
+	before := fileRecipients(t, p.LocalSecrets)
+	devPub, _ := sopstest.NewKey(t)
+
+	_, _, err := runCLI(t, "--env", "e2e", "keys", "add", "dev", devPub)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `environments "e2e" and "local" share secrets file .envctl/local.enc.yaml with different age_recipients`)
+	assert.Equal(t, cfg, string(readFile(t, p.ConfigPath)))
+	assert.Equal(t, before, fileRecipients(t, p.LocalSecrets))
 }
 
 func TestKeysAdd_SharedSecretsFile(t *testing.T) {
