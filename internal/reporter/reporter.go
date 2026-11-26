@@ -77,7 +77,7 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 
 	// List unused secrets
 	for _, d := range rs.Diagnostics {
-		if d.Severity == resolver.SeverityWarning {
+		if _, inTemplate := classification[d.Variable]; !inTemplate && d.Severity != resolver.SeverityInfo {
 			fmt.Fprintf(w, "    %s %s (unused)\n", yellow("!"), d.Variable)
 		}
 	}
@@ -86,9 +86,13 @@ func PrintVerifyResult(w io.Writer, parsed *template.ParseResult, rs *resolver.R
 
 	missingCount := required - resolvedRequired
 
-	switch {
-	case missingCount > 0 || rs.HasErrors():
+	switch summary := rs.FailureSummary(); {
+	case summary != "":
+		fmt.Fprintln(w, summary)
+	case missingCount > 0:
 		fmt.Fprintf(w, "%d missing required secret(s)\n", missingCount)
+	case rs.HasErrors():
+		fmt.Fprintf(w, "%d error(s)\n", rs.ErrorCount())
 	case rs.WarningCount() > 0:
 		fmt.Fprintf(w, "%d warning(s)\n", rs.WarningCount())
 	default:

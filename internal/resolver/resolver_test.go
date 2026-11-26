@@ -98,3 +98,28 @@ func TestResolve_StrictMode(t *testing.T) {
 	assert.Equal(t, 1, rs.ErrorCount())
 	assert.Equal(t, 0, rs.WarningCount())
 }
+
+func TestFailureSummary(t *testing.T) {
+	missing := ResolvedVar{Name: "TOKEN", Status: StatusMissing}
+	ok := ResolvedVar{Name: "API_URL", Status: StatusOK}
+	unusedAs := func(sev Severity) Diagnostic {
+		return Diagnostic{Severity: sev, Variable: "OLD", Message: "secret exists in store but not referenced in template"}
+	}
+	missingDiag := Diagnostic{Severity: SeverityError, Variable: "TOKEN", Message: "required secret is missing"}
+	cases := []struct {
+		name string
+		rs   ResolvedSet
+		want string
+	}{
+		{"all good", ResolvedSet{Vars: []ResolvedVar{ok}}, ""},
+		{"unused outside strict mode", ResolvedSet{Vars: []ResolvedVar{ok}, Unused: []string{"OLD"}, Diagnostics: []Diagnostic{unusedAs(SeverityWarning)}}, ""},
+		{"missing only", ResolvedSet{Vars: []ResolvedVar{missing}, Diagnostics: []Diagnostic{missingDiag}}, "1 missing required secret(s)"},
+		{"unused in strict mode", ResolvedSet{Vars: []ResolvedVar{ok}, Unused: []string{"OLD"}, Diagnostics: []Diagnostic{unusedAs(SeverityError)}}, "1 unused secret(s) in strict mode"},
+		{"missing and unused in strict mode", ResolvedSet{Vars: []ResolvedVar{missing}, Unused: []string{"OLD"}, Diagnostics: []Diagnostic{missingDiag, unusedAs(SeverityError)}}, "1 missing required secret(s), 1 unused secret(s) in strict mode"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.rs.FailureSummary())
+		})
+	}
+}

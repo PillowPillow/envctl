@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -50,6 +51,9 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 	result := reporter.PrintVerifyResult(os.Stdout, parsed, rs)
 
+	if summary := rs.FailureSummary(); summary != "" {
+		return errors.New(summary)
+	}
 	if result.MissingCount > 0 {
 		return fmt.Errorf("%d missing required secret(s)", result.MissingCount)
 	}
