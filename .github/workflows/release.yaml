@@ -35,8 +35,15 @@ jobs:
           go-version-file: go.mod
 
       - name: Install syft (SBOM)
+        env:
+          SYFT_VERSION: "1.54.0"
+          SYFT_SHA256: "54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.54.0/install.sh | sh -s -- -b /usr/local/bin v1.54.0
+          curl -fsSLo syft.tar.gz "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  syft.tar.gz" | sha256sum -c -
+          tar -xzf syft.tar.gz syft
+          sudo install -m 0755 syft /usr/local/bin/syft
+          rm syft syft.tar.gz
 
       - name: Install age and sops
         # Keep SOPS_VERSION and SOPS_SHA256 in sync with ci.yaml and the Dockerfile (ARG SOPS_VERSION / SOPS_SHA256_AMD64).
@@ -66,6 +73,12 @@ jobs:
           subject-path: |
             dist/*.tar.gz
             dist/checksums.txt
+
+      # GoReleaser leaves a draft so nobody downloads archives before their attestation exists.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
   docker:
     runs-on: ubuntu-26.04
