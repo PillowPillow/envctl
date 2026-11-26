@@ -169,3 +169,29 @@ func TestPrintVerifyResult_UnusedSecrets(t *testing.T) {
 	assert.Contains(t, output, "unused")
 	assert.Equal(t, 0, result.MissingCount)
 }
+
+func TestPrintVerifyResult_StrictUnusedSecretsAreListedAndNotCountedAsMissing(t *testing.T) {
+	parsed := &template.ParseResult{
+		Variables: []template.Variable{
+			{Name: "DB_HOST", Classification: template.RequiredSecret},
+		},
+	}
+	rs := &resolver.ResolvedSet{
+		Vars: []resolver.ResolvedVar{
+			{Name: "DB_HOST", Value: "localhost", Source: resolver.SourceSecret, Status: resolver.StatusOK},
+		},
+		Unused: []string{"OLD_SECRET"},
+		Diagnostics: []resolver.Diagnostic{
+			{Severity: resolver.SeverityError, Variable: "OLD_SECRET", Message: "secret exists in store but not referenced in template"},
+		},
+	}
+
+	var buf bytes.Buffer
+	result := PrintVerifyResult(&buf, parsed, rs)
+	output := buf.String()
+
+	assert.Contains(t, output, "OLD_SECRET (unused)")
+	assert.Contains(t, output, "1 unused secret(s) in strict mode")
+	assert.NotContains(t, output, "missing required")
+	assert.Equal(t, 0, result.MissingCount)
+}

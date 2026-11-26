@@ -138,3 +138,33 @@ func (rs *ResolvedSet) WarningCount() int {
 	}
 	return count
 }
+
+// FailureSummary describes why the resolution fails, or returns "" when it does not.
+func (rs *ResolvedSet) FailureSummary() string {
+	missing := 0
+	for _, v := range rs.Vars {
+		if v.Status == StatusMissing {
+			missing++
+		}
+	}
+	unused := make(map[string]bool, len(rs.Unused))
+	for _, name := range rs.Unused {
+		unused[name] = true
+	}
+	strictUnused := 0
+	for _, d := range rs.Diagnostics {
+		if d.Severity == SeverityError && unused[d.Variable] {
+			strictUnused++
+		}
+	}
+	switch {
+	case missing == 0 && strictUnused == 0:
+		return ""
+	case strictUnused == 0:
+		return fmt.Sprintf("%d missing required secret(s)", missing)
+	case missing == 0:
+		return fmt.Sprintf("%d unused secret(s) in strict mode", strictUnused)
+	default:
+		return fmt.Sprintf("%d missing required secret(s), %d unused secret(s) in strict mode", missing, strictUnused)
+	}
+}
