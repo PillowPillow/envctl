@@ -52,7 +52,7 @@ var skipUpdateCheckCommands = map[string]bool{
 }
 
 func startBackgroundUpdateCheck() <-chan string {
-	if appVersion == "" || appVersion == "dev" || isHomebrewInstall() {
+	if appVersion == "" || appVersion == "dev" || installedWithGo || isHomebrewInstall() {
 		return nil
 	}
 

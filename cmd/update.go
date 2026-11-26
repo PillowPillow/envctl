@@ -37,6 +37,11 @@ func runUpdateWith(client *updater.GitHubClient) error {
 		return nil
 	}
 
+	if installedWithGo {
+		color.Yellow("envctl was installed with go install. Run 'go install github.com/PillowPillow/envctl/v2@latest' instead.")
+		return nil
+	}
+
 	if isHomebrewInstall() {
 		color.Yellow("envctl is managed by Homebrew. Run 'brew upgrade envctl' instead.")
 		return nil
