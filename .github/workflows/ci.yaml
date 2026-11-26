@@ -28,6 +28,9 @@ jobs:
       - name: Verify module checksums
         run: go mod verify
 
+      - name: shellcheck
+        run: shellcheck install.sh
+
       - name: Check go.mod tidiness
         run: |
           GOFLAGS="" go mod tidy
