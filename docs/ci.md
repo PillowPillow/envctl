@@ -14,19 +14,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: PillowPillow/envctl@v2.1.0
+      - uses: PillowPillow/envctl@v2.1.1
         with:
           command: verify
           environment: production
-          envctl-version: 2.1.0
+          envctl-version: 2.1.1
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 
-      - uses: PillowPillow/envctl@v2.1.0
+      - uses: PillowPillow/envctl@v2.1.1
         with:
           command: generate
           environment: production
-          envctl-version: 2.1.0
+          envctl-version: 2.1.1
           output-path: .env.production
         env:
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
@@ -34,7 +34,7 @@ jobs:
       - run: npm run build  # .env.production is in the workspace
 ```
 
-Pin both the action (`@v2.1.0`) and `envctl-version`: the action runs the Docker image tagged `envctl-version`, which defaults to `latest`, so the action ref alone does not pin the binary.
+Pin both the action (`@v2.1.1`) and `envctl-version`: the action runs the Docker image tagged `envctl-version`, which defaults to `latest`, so the action ref alone does not pin the binary.
 
 Action inputs:
 
@@ -42,7 +42,7 @@ Action inputs:
 |-------|----------|---------|-------------|
 | `command` | yes | | `verify` or `generate` |
 | `environment` | yes | | Target environment name |
-| `envctl-version` | no | `latest` | Docker image tag, without the `v` (e.g. `2.1.0`) |
+| `envctl-version` | no | `latest` | Docker image tag, without the `v` (e.g. `2.1.1`) |
 | `output-path` | no | `.env` | Output path for generate |
 | `strict` | no | `true` | Treat warnings as errors (verify only) |
 
@@ -55,11 +55,11 @@ For a standalone check, for example a required status check on pull requests:
 ```yaml
 jobs:
   envctl:
-    uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@v2.1.0
+    uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@v2.1.1
     with:
       environment: production
       github-environment: production
-      envctl-version: 2.1.0
+      envctl-version: 2.1.1
     secrets: inherit
 ```
 
@@ -79,5 +79,5 @@ The `github-environment` input maps to the GitHub Actions [environment](https://
 
 ```bash
 docker run --rm -v "$PWD:/workspace" -w /workspace -e SOPS_AGE_KEY \
-  ghcr.io/pillowpillow/envctl:2.1.0 verify --env production
+  ghcr.io/pillowpillow/envctl:2.1.1 verify --env production
 ```
