@@ -27,6 +27,7 @@ type Environment struct {
 	Overrides     map[string]string `yaml:"overrides"`
 	Strip         []string          `yaml:"strip"`
 	AgeRecipients map[string]string `yaml:"age_recipients,omitempty"`
+	Shared        bool              `yaml:"shared,omitempty"`
 }
 
 const ScopeGlobal = "global"
@@ -81,7 +82,61 @@ func Parse(data []byte, path string) (*Config, error) {
 			cfg.Environments[name] = env
 		}
 	}
+	if err := cfg.validateSharedSecrets(dir); err != nil {
+		return nil, fmt.Errorf("invalid config %s: %w", path, err)
+	}
 	return &cfg, nil
+}
+
+// validateSharedSecrets rejects a secrets file shared by environments with different recipients unless each opts in, since every recipient of one can then read the others' secrets.
+func (c *Config) validateSharedSecrets(dir string) error {
+	groups := map[string][]string{}
+	for _, name := range c.EnvNames() {
+		file := CanonicalPath(c.Environments[name].Secrets)
+		groups[file] = append(groups[file], name)
+	}
+	files := make([]string, 0, len(groups))
+	for file := range groups {
+		files = append(files, file)
+	}
+	sort.Strings(files)
+	for _, file := range files {
+		names := groups[file]
+		first := c.Environments[names[0]]
+		allShared := true
+		for _, name := range names {
+			allShared = allShared && c.Environments[name].Shared
+		}
+		if allShared {
+			continue
+		}
+		for _, name := range names[1:] {
+			if sameRecipientKeys(first.AgeRecipients, c.Environments[name].AgeRecipients) {
+				continue
+			}
+			shown := first.Secrets
+			if rel, err := filepath.Rel(dir, shown); err == nil {
+				shown = rel
+			}
+			return fmt.Errorf("environments %q and %q share secrets file %s with different age_recipients; give them the same recipients, or set shared: true on each of them to encrypt the file for all of their recipients", names[0], name, shown)
+		}
+	}
+	return nil
+}
+
+func sameRecipientKeys(a, b map[string]string) bool {
+	set := make(map[string]bool, len(a))
+	for _, key := range a {
+		set[key] = true
+	}
+	other := make(map[string]bool, len(b))
+	for _, key := range b {
+		if !set[key] {
+			return false
+		}
+		other[key] = true
+	}
+	return len(other) == len(set)
 }
 
 // EnvNames returns the environment names in sorted order.
