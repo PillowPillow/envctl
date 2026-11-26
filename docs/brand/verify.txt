@@ -1,0 +1,14 @@
+$ envctl verify --env production
+
+Parsing template...
+  Found 6 variables (4 required, 1 optional, 1 static)
+
+Checking secrets...
+  FAIL 3/4 required secrets found
+    ✓ DATABASE_URL (secret)
+    ✓ STRIPE_SECRET_KEY (secret)
+    ✗ STRIPE_WEBHOOK_SECRET
+    ✓ SENTRY_DSN (secret)
+
+1 missing required secret(s)
+Error: 1 missing required secret(s)
