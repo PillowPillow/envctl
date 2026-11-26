@@ -61,7 +61,8 @@ main() {
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
 
-    download "${base_url}/${archive}" "${work}/${archive}"
+    download "${base_url}/${archive}" "${work}/${archive}" \
+        || fail "Release ${version:-latest} has no ${archive}. Nothing was installed."
     download "${base_url}/checksums.txt" "${work}/checksums.txt"
 
     local expected actual
@@ -72,7 +73,7 @@ main() {
     ok "Checksum verified."
 
     # The checksum proves integrity only; the attestation proves the archive came from the release workflow.
-    if command -v gh >/dev/null && gh auth status >/dev/null 2>&1 && gh attestation --help >/dev/null 2>&1; then
+    if command -v gh >/dev/null && gh auth status --hostname github.com >/dev/null 2>&1 && gh attestation --help >/dev/null 2>&1; then
         local report
         report="$(gh attestation verify "${work}/${archive}" --repo "$REPO" \
             --signer-workflow "${REPO}/.github/workflows/release.yaml" 2>&1)" || {

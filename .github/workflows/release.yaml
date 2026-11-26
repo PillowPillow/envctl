@@ -164,7 +164,7 @@ jobs:
           git push
 
   smoke:
-    needs: [tap, docker]
+    needs: tap
     permissions:
       contents: read
       attestations: read
@@ -182,7 +182,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ENVCTL_VERSION="$GITHUB_REF_NAME" INSTALL_DIR="$RUNNER_TEMP/curl" bash install.sh
+          ENVCTL_VERSION="$GITHUB_REF_NAME" INSTALL_DIR="$RUNNER_TEMP/curl" bash install.sh | tee "$RUNNER_TEMP/curl.log"
+          grep -F "Provenance verified." "$RUNNER_TEMP/curl.log"
           "$RUNNER_TEMP/curl/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -193,6 +194,7 @@ jobs:
         run: |
           GOBIN="$RUNNER_TEMP/go" go install "github.com/PillowPillow/envctl/v2@$GITHUB_REF_NAME"
           "$RUNNER_TEMP/go/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
+          "$RUNNER_TEMP/go/envctl" update | grep -F "go install github.com/PillowPillow/envctl/v2@latest"
 
       - name: Install with Homebrew
         env:
@@ -202,3 +204,4 @@ jobs:
           brew install pillowpillow/tap/envctl
           brew test envctl
           "$(brew --prefix)/bin/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
+          "$(brew --prefix)/bin/envctl" update | grep -F "brew upgrade envctl"
