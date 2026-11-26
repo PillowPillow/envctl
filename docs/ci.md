@@ -71,6 +71,8 @@ Workflow inputs:
 | `github-environment` | yes | | GitHub environment that holds `SOPS_AGE_KEY` |
 | `envctl-version` | no | `latest` | Docker image tag, without the `v` |
 
+The workflow calls the composite action from `main`, so its steps follow the latest action; `envctl-version` pins the Docker image, and with it the envctl binary that runs.
+
 The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored.
 
 ## Docker, anywhere else
