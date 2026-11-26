@@ -46,6 +46,7 @@ Keys of an environment:
 | `overrides` | Values that win over the secrets file and the template defaults |
 | `strip` | Variables removed from the generated output |
 | `age_recipients` | Extra keys that can decrypt this environment only (see below) |
+| `shared` | Allows this environment to share its `secrets` file with environments that have other recipients (see below) |
 
 ## Templates
 
@@ -82,7 +83,19 @@ environments:
 
 A recipient name uses letters, digits, `.`, `_` or `-` and starts with a letter or a digit. The same name may appear in several environments (for example a `dev` key per environment), but never both globally and in an environment: `envctl keys add` refuses a global name that already exists in any scope, and an `--env <name>` add refuses a name that is global or already in that environment. A name that is both global and in an environment (for example after a manual edit) is rejected when the config loads, so every command fails until the duplicate is removed. A config without per-environment `age_recipients` behaves as before. The environment name `global` is reserved for the global recipients (it is the `SCOPE` shown by `keys list`) and is rejected when the config loads.
 
-When several environments point to the same `secrets` file, that file is encrypted for the union of their recipients: a key added to one of them with `--env` can decrypt the shared file, and so the other environments' secrets too.
+Several environments may point to the same `secrets` file, directly or through a symlink, as long as they have the same `age_recipients`. If their recipients differ, the config is rejected when it loads, because the shared file would be encrypted for the union of their recipients and a key added to one environment could read the others' secrets. To share a file on purpose anyway, set `shared: true` on each environment that uses it:
+
+```yaml
+environments:
+  local:
+    shared: true
+    secrets: .envctl/secrets.local.enc.yaml
+  e2e:
+    shared: true
+    secrets: .envctl/secrets.local.enc.yaml
+    age_recipients:
+      vm2: age1...
+```
 
 ## Path resolution
 

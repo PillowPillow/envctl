@@ -134,7 +134,7 @@ envctl keys add ops age1… --env production    # ops reads production only
 envctl keys remove bob --env local            # revoke and re-encrypt
 ```
 
-A key added without `--env` is global: it opens every environment. Environments that share one secrets file share its keys too. Details in [Keys and re-encryption](docs/keys.md).
+A key added without `--env` is global: it opens every environment. Environments that point to one secrets file must have the same keys, unless each is marked `shared: true`, in which case a key added to one opens them all. Details in [Keys and re-encryption](docs/keys.md).
 
 ## Use it in CI
 

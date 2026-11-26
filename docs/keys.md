@@ -26,7 +26,7 @@ envctl keys list --env local
 
 `dev` can now decrypt `local` only; the global recipients still can. A global recipient cannot be removed from a single environment: `envctl keys remove <name> --env <env>` fails and tells you to remove it without `--env`.
 
-Environments that point to the same `secrets` file share their recipients: a key added to one of them can decrypt the shared file.
+Environments that point to the same `secrets` file must have the same recipients, so `keys add --env` on one of them is refused. Set `shared: true` on each of them to allow it (see [Configuration](configuration.md#environmentsenvage_recipients)): the key can then decrypt the shared file, and so every environment that uses it.
 
 ## Add a CI key
 
