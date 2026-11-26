@@ -1,481 +1,201 @@
-# envctl
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/hero-dark.svg">
+    <img src="docs/brand/hero-light.svg" width="880" alt="envctl. Your repo holds every secret it needs. One key opens it.">
+  </picture>
+</p>
 
-Environment configuration manager with SOPS/age encryption.
+<p align="center">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-B4472E" alt="GPL-3.0 license">
+  <img src="https://img.shields.io/badge/release-v2.1.0-B4472E" alt="Latest release v2.1.0">
+  <img src="https://img.shields.io/badge/go-1.27-B4472E" alt="Built with Go 1.27">
+  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux-B4472E" alt="Runs on macOS and Linux">
+</p>
 
-Single source of truth for environment variables across projects: `.env.example` defines what exists, SOPS-encrypted files store the values.
+**envctl keeps your project's secrets in the project.** Which variables exist, their values for every environment, and who can read them all live in the repository, encrypted with [SOPS](https://getsops.io) and [age](https://github.com/FiloSottile/age). There is no vault to host, no account to create, no service to keep in sync. Clone the repo, get your key, run `envctl generate`: you can work.
 
-## Problem
+- **Self-contained.** The template, the encrypted values and the list of keys are committed. No server, no account, no lock-in: the secrets stay plain sops files.
+- **Access per environment.** Developers open `local`. Only ops and CI open `production`. One command adds or revokes a key and re-encrypts.
+- **Never ship an empty var.** `envctl verify` fails the build when a variable of `.env.example` has no value for the target environment.
 
-Managing environment variables in multi-repo projects is error-prone:
+## Never ship an empty env var again
 
-- **Forgotten secrets** -- new variables added to `.env.example` but not configured in CI, causing silent empty values in production
-- **Manual workflow maintenance** -- every new secret requires a manual edit of the CI workflow `env:` section
-- **No portable secret store** -- sensitive values live in developers' heads, local `.env` files, or scattered across cloud provider settings
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/verify-dark.svg">
+    <img src="docs/brand/verify-light.svg" width="632" alt="Terminal output of envctl verify --env production: three required secrets found, STRIPE_WEBHOOK_SECRET missing, 1 missing required secret.">
+  </picture>
+</p>
+
+Someone added `STRIPE_WEBHOOK_SECRET` to `.env.example` and forgot production. `envctl verify` exits with code 1, and the deploy stops here instead of failing later in production.
 
 ## How it works
 
-envctl parses your `.env.example` and classifies each variable:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/flow-dark.svg">
+    <img src="docs/brand/flow-light.svg" width="820" alt="Three files: .env.example lists the variables, .envctl/*.enc.yaml holds their encrypted values, both committed; envctl generate writes a .env that stays out of git. envctl verify checks the first two against each other.">
+  </picture>
+</p>
 
-| Syntax in `.env.example` | Classification | Behavior |
+Your `.env.example` is the contract. Each line is one of three kinds:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/classes-dark.svg">
+    <img src="docs/brand/classes-light.svg" width="820" alt="The three kinds of variable: static, required and optional.">
+  </picture>
+</p>
+
+| Line in `.env.example` | Kind | What envctl does |
 |---|---|---|
-| `VAR=hardcoded` | **static** | Literal value, no substitution |
-| `VAR=${VAR}` | **required-secret** | Must exist in secret store, error if missing |
-| `VAR=${VAR:-default}` | **optional-secret** | Uses secret store value if present, falls back to default |
+| `PORT=3000` | static | Copies it as written |
+| `DATABASE_URL=${DATABASE_URL}` | required | Takes the value from the encrypted file; `verify` fails without one |
+| `LOG_LEVEL=${LOG_LEVEL:-info}` | optional | Takes the encrypted value, or falls back to `info` |
 
-Secrets are stored in SOPS/age-encrypted YAML files committed to the repo. Keys are readable (for diffing), values are encrypted.
+The template does not have to be a `.env` file: any text file with `${VAR}` placeholders works, such as a YAML or JSON config.
 
-## Installation
+## Install
 
-### Install script
+With [Homebrew](https://brew.sh) (installs `sops` and `age` too):
 
-Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated (`gh auth login`).
-
-```bash
-gh api repos/PillowPillow/envctl/contents/scripts/install.sh --jq '.content' | base64 -d | GITHUB_TOKEN=$(gh auth token) bash
+```sh
+brew install pillowpillow/tap/envctl
 ```
 
-Installs to `~/.envctl/bin/envctl`. Optional environment variables:
-- `ENVCTL_VERSION` -- pin a specific version (default: latest)
-- `INSTALL_DIR` -- custom install path (default: `~/.envctl/bin`)
+Or with the install script, then install [`sops`](https://github.com/getsops/sops#download) and [`age`](https://github.com/FiloSottile/age#installation) yourself:
 
-### Self-update
-
-```bash
-envctl update
+```sh
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | bash
 ```
 
-envctl also checks for updates in the background (once every 24h) and notifies you when a new version is available.
+The script installs the latest release in `~/.envctl/bin` and checks its sha256 checksum; if the [GitHub CLI](https://cli.github.com) is signed in, it also verifies that the archive was built by this repository's release workflow. [Read `install.sh`](install.sh) before you run it. To pin a version, pass it to `bash`, not to `curl` (`INSTALL_DIR` works the same way):
 
-### Docker
-
-```bash
-docker pull ghcr.io/pillowpillow/envctl:latest
+```sh
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | ENVCTL_VERSION=v2.1.0 bash
 ```
 
-### From source
+envctl runs on macOS and Linux, on amd64 and arm64.
 
-```bash
+<details>
+<summary>Install with Go</summary>
+
+```sh
 go install github.com/PillowPillow/envctl/v2@latest
 ```
 
-### Prerequisites
+You need `sops` and `age` on your `PATH` as well.
+</details>
 
-envctl requires [sops](https://github.com/getsops/sops) and [age](https://github.com/FiloSottile/age) for encryption:
+<details>
+<summary>Run with Docker</summary>
 
-```bash
-# macOS
-brew install sops age
+The image bundles envctl, sops and age:
 
-# Linux
-go install github.com/getsops/sops/v3/cmd/sops@latest
-go install filippo.io/age/cmd/...@latest
+```sh
+docker run --rm -v "$PWD:/workspace" -e SOPS_AGE_KEY ghcr.io/pillowpillow/envctl:2.1.0 verify --env production
+```
+</details>
+
+<details>
+<summary>Verify a release</summary>
+
+Every release archive carries a build provenance attestation. With the GitHub CLI signed in:
+
+```sh
+gh attestation verify envctl_<os>_<arch>.tar.gz --repo PillowPillow/envctl --signer-workflow PillowPillow/envctl/.github/workflows/release.yaml
+```
+</details>
+
+## Quickstart
+
+In a project that already has a `.env.example`:
+
+```sh
+envctl init                                    # creates .envctl.yaml and .envctl/
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt      # your key pair, if you have none
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt   # add to your shell profile
+envctl keys add me <your age1… public key>     # your key opens every environment
+envctl edit --env local                        # fill in the values, saved encrypted
+envctl verify --env local                      # every required variable has a value
+envctl generate --env local --output .env      # writes the .env you run with
 ```
 
-## Getting started
+Commit `.envctl.yaml` and `.envctl/`. A teammate who clones the repo only needs their key added to run `envctl generate`.
 
-### 1. Initialize envctl in your project
+## Who can open what
 
-Navigate to a project that has a `.env.example` file:
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/access-dark.svg">
+    <img src="docs/brand/access-light.svg" width="820" alt="Access matrix: alice holds a global key and opens local, staging and production; bob opens local only; ci opens staging and production; ops opens production only.">
+  </picture>
+</p>
 
-```bash
-cd your-project
-envctl init
+```sh
+envctl keys add bob age1… --env local         # bob reads local only
+envctl keys add ops age1… --env production    # ops reads production only
+envctl keys remove bob --env local            # revoke and re-encrypt
 ```
 
-This will:
-- Detect your `.env.example` and classify its variables
-- Create `.envctl.yaml` (project configuration)
-- Create `.envctl/` directory for encrypted secret files
-- Update `.gitignore`
+A key added without `--env` is global: it opens every environment. Environments that point to one secrets file must have the same keys, unless each is marked `shared: true`, in which case a key added to one opens them all. Details in [Keys and re-encryption](docs/keys.md).
 
-### 2. Generate an age key pair and add it as a recipient
+## Use it in CI
 
-```bash
-age-keygen -o ~/.config/sops/age/keys.txt
-```
-
-Copy the public key (starts with `age1...`) and register it:
-
-```bash
-envctl keys add your-name age1ql3z7hjy54pw3hyww5ayf...
-```
-
-This adds the key to `.envctl.yaml` and re-encrypts any existing secrets files. To give the key access to one environment only, add `--env <name>`.
-
-### 3. Create your secrets file
-
-```bash
-envctl edit --env local
-```
-
-This opens your `$EDITOR` with a YAML file. Add your secret values:
+The composite action runs envctl from its Docker image; CI needs only one age private key, stored as the `SOPS_AGE_KEY` secret.
 
 ```yaml
-DB_PASSWORD: my-local-password
-APP_KEY: base64:your-app-key
-REDIS_PASSWORD: redis-pass
-```
-
-Save and close -- sops encrypts the file automatically.
-
-### 4. Verify your setup
-
-```bash
-envctl verify --env local
-```
-
-Output:
-
-```
-Parsing template...
-  Found 52 variables (14 required, 28 optional, 10 static)
-
-Checking secrets...
-  OK 14/14 required secrets found
-
-All checks passed.
-```
-
-### 5. Generate your .env file
-
-```bash
-envctl generate --env local --output .env
-```
-
-## Configuration
-
-> **Note**: `envctl init` generates this file automatically. The reference below is for customizing it after initialization.
-
-### `.envctl.yaml`
-
-```yaml
-version: "1"
-
-# Source template
-template: .env.example
-
-# Environment definitions
-environments:
-  local:
-    secrets: .envctl/secrets.local.enc.yaml
-    age_recipients:       # optional: added to the global recipients, this env only
-      dev: age1xyz789...
-    overrides:
-      APP_ENV: local
-      APP_DEBUG: "true"
-
-  production:
-    secrets: .envctl/secrets.production.enc.yaml
-    overrides:
-      APP_ENV: production
-      APP_DEBUG: "false"
-      APP_URL: https://api.example.com
-    strip:
-      - DEBUG_VAR         # dev-only, remove from output
-      - COMPOSE_PROJECT_NAME
-
-# SOPS encryption recipients (managed via envctl keys)
-sops:
-  age_recipients:
-    alice: age1ql3z7hjy54pw3hyww5ayf...
-    ci: age1abc123...
-```
-
-### `sops.age_recipients`
-
-Named map of age public keys. Managed via `envctl keys`:
-
-```yaml
-sops:
-  age_recipients:
-    alice: age1ql3z7hjy54pw3hyww5ayf...
-    ci: age1abc123...
-```
-
-### `environments.<env>.age_recipients`
-
-Optional named map of age public keys that can decrypt **this environment's** secrets file only. It is additive: the recipients of an environment are the global `sops.age_recipients` plus the ones listed here.
-
-```yaml
-environments:
-  local:
-    secrets: .envctl/secrets.local.enc.yaml
-    age_recipients:
-      dev: age1xyz789...
-```
-
-A recipient name uses letters, digits, `.`, `_` or `-` and starts with a letter or a digit. The same name may appear in several environments (for example a `dev` key per environment), but never both globally and in an environment: `envctl keys add` refuses a global name that already exists in any scope, and an `--env <name>` add refuses a name that is global or already in that environment. A name that is both global and in an environment (for example after a manual edit) is rejected when the config loads, so every command fails until the duplicate is removed. A config without per-environment `age_recipients` behaves as before. The environment name `global` is reserved for the global recipients (it is the `SCOPE` shown by `keys list`) and is rejected when the config loads.
-
-Several environments may point to the same `secrets` file, directly or through a symlink, as long as they have the same `age_recipients`. If their recipients differ, the config is rejected when it loads, because the shared file would be encrypted for the union of their recipients and a key added to one environment could read the others' secrets. To share a file on purpose anyway, set `shared: true` on each environment that uses it:
-
-```yaml
-environments:
-  local:
-    shared: true
-    secrets: .envctl/secrets.local.enc.yaml
-  e2e:
-    shared: true
-    secrets: .envctl/secrets.local.enc.yaml
-    age_recipients:
-      vm2: age1...
-```
-
-### Path resolution
-
-`secrets` paths are resolved from the folder that contains `.envctl.yaml`, not from the current directory, so every command behaves the same wherever you run it from inside the project. `template` and `output` paths stay relative to the current directory.
-
-### Substitution priority
-
-When generating a `.env` file, values are resolved in this order (highest wins):
-
-1. `overrides` from `.envctl.yaml`
-2. Secret store value (SOPS file)
-3. Default from `.env.example` (`${VAR:-default}`)
-4. Empty string (with error if `required-secret`)
-
-## Commands
-
-### `envctl verify`
-
-Check that all required secrets are present for an environment:
-
-```bash
-envctl verify --env production
-envctl verify --env production --strict  # treat warnings as errors (auto-enabled in CI)
-```
-
-Exit codes: `0` all good, `1` missing required secrets, `2` config error.
-
-### `envctl generate`
-
-Produce a `.env` file from template + secrets + overrides:
-
-```bash
-envctl generate --env local --output .env
-envctl generate --env production --output env-production --strict
-envctl generate --env local  # outputs to stdout
-```
-
-### `envctl diff`
-
-Compare resolved values between two environments:
-
-```bash
-envctl diff --from staging --to production
-envctl diff --from local --to production --reveal  # show actual values
-```
-
-Output:
-
-```
-Comparing staging -> production:
-
-  APP_URL:
-    staging:    (set, 32 chars)
-    production: (set, 28 chars)
-
-  DB_PASSWORD:
-    staging:    (set, 12 chars)
-    production: (set, 24 chars)
-
-  2 difference(s)
-```
-
-### `envctl keys`
-
-Manage age encryption recipients. Without `--env` the command targets the global recipients (all environments); with `--env <name>` it targets one environment:
-
-```bash
-envctl keys list                              # List all recipients, with their scope
-envctl keys list --env production             # List the effective recipients of production
-envctl keys add <name> <age1...>              # Add a global recipient + re-encrypt all secrets files
-envctl keys add <name> <age1...> --env local  # Add a recipient to local only + re-encrypt its file
-envctl keys remove <name>                     # Remove a global recipient + re-encrypt all secrets files
-envctl keys remove <name> --env local         # Remove a recipient from local only
-```
-
-`keys list` prints `NAME`, `KEY` and `SCOPE` columns (`global` or the environment name). Every `add` and `remove` re-keys and rotates the affected secrets files.
-
-### `envctl edit`
-
-Open the encrypted secrets file in your editor:
-
-```bash
-envctl edit --env production
-```
-
-### `envctl init`
-
-Bootstrap envctl in an existing project. **Always use this command** rather than creating configuration files manually -- it detects your template, classifies variables, creates the config and directory structure, and updates `.gitignore`:
-
-```bash
-envctl init
-```
-
-What it does:
-1. Checks that `sops` and `age` are installed
-2. Detects your template file (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`)
-3. Parses variables and reports stats (required, optional, static)
-4. Creates `.envctl.yaml` with `local` and `production` environments pre-configured
-5. Creates `.envctl/` directory for encrypted secret files
-6. Appends envctl entries to `.gitignore`
-
-## CI/CD usage
-
-The Docker image (`ghcr.io/pillowpillow/envctl`) bundles envctl, sops, and age -- no prerequisites to install.
-
-### GitHub Actions -- composite action (recommended)
-
-Use the action as steps in your build job. The `.env` file stays in the workspace -- no artifacts, no secrets leaking:
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
+- uses: PillowPillow/envctl@v2.1.0
+  with:
+    command: verify
     environment: production
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: PillowPillow/envctl@main
-        with:
-          command: verify
-          environment: production
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-
-      - uses: PillowPillow/envctl@main
-        with:
-          command: generate
-          environment: production
-          output-path: .env.production
-        env:
-          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
-
-      - run: npm run build  # .env.production is in the workspace
+    envctl-version: 2.1.0
+  env:
+    SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
 ```
 
-Action inputs:
+Use `command: generate` to write the `.env` in the job workspace before your build. Pin `envctl-version` as well as the action: it selects the image, and defaults to `latest`. A reusable workflow for a standalone verify check and the full list of inputs are in [CI](docs/ci.md).
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `command` | yes | | `verify` or `generate` |
-| `environment` | yes | | Target environment name |
-| `envctl-version` | no | `latest` | Docker image tag |
-| `output-path` | no | `.env` | Output path for generate |
-| `strict` | no | `true` | Treat warnings as errors (verify only) |
+## How it compares
 
-### GitHub Actions -- reusable workflow (verify only)
+| Compared with | Where envctl helps | Where the other tool is better |
+|---|---|---|
+| [sops](https://getsops.io) alone | A `verify` gate against `.env.example`, a diff between environments, overrides, and keys added or removed by name and environment, with re-encryption, instead of editing `.sops.yaml` rules | More key backends (AWS, GCP, Azure and HuaweiCloud KMS, HashiCorp Vault, PGP); `sops exec-env` runs a process without writing a file. envctl files stay plain sops files, so you can drop envctl at any time |
+| [dotenvx](https://dotenvx.com) | Each person and each CI runner has their own age key, which can be limited to some environments; removing a key re-encrypts the files | One binary with nothing else to install, Windows support, and `dotenvx run` injects values at runtime instead of writing a `.env` |
+| [varlock](https://varlock.dev) | A shared encrypted store committed to git, driven by the `.env.example` syntax you already have | Typed validation, log redaction and leak scanning, Windows support; team secrets come from plugins such as 1Password or Infisical |
+| [Doppler](https://www.doppler.com), [Infisical](https://infisical.com) | No server or account, works offline, and secret changes are reviewed in pull requests | Audit logs, access control, automatic rotation and dynamic secrets (on their paid plans); Infisical can be self-hosted |
+| [1Password CLI](https://www.1password.dev/cli/) (`op run`) | No 1Password account needed; CI needs a single age key | Values reach a subprocess only for its lifetime instead of a `.env` file; fits teams already on 1Password |
 
-For a standalone verification check (e.g. as a required status check on PRs):
+### When not to use envctl
 
-```yaml
-jobs:
-  envctl:
-    uses: PillowPillow/envctl/.github/workflows/envctl-verify.yaml@main
-    with:
-      environment: production
-      github-environment: production
-    secrets: inherit
-```
+- You need an audit log of who read which secret.
+- You need to revoke access without changing the values: git history keeps old encrypted versions readable by every key that could open them.
+- You need dynamic or automatically rotated secrets.
+- You develop on Windows.
+- Your secrets must never be written to disk in clear text.
 
-The `github-environment` input maps to the GitHub Actions [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) where `SOPS_AGE_KEY` is stored.
+## Security model
 
-## Project structure
+- **What is encrypted.** Values are encrypted by sops with AES-256-GCM; the data key is encrypted for each age recipient. Variable names stay in clear text so a diff can be reviewed.
+- **Git remembers.** Removing a key re-encrypts the files, but the old versions in git history stay readable with that key. When someone leaves, remove their key and change the values they could read.
+- **The `.env` is plaintext, by design.** `envctl generate` writes the values your app reads. `envctl init` adds `.env` and `.env.local` to `.gitignore`; if you write elsewhere with `--output`, ignore that path yourself.
+- **One global key opens everything.** Keep global keys for the people who need every environment; give everyone else `--env` keys.
 
-```
-your-project/
-  .env.example                          # Template (committed)
-  .envctl.yaml                          # Configuration (committed)
-  .envctl/
-    secrets.local.enc.yaml              # Encrypted local secrets (committed)
-    secrets.production.enc.yaml         # Encrypted production secrets (committed)
-```
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
-Encrypted files are safe to commit -- keys are readable for review, values are encrypted with age.
+## Documentation
 
-## Managing recipients
+- [Configuration](docs/configuration.md): `.envctl.yaml`, templates, overrides, path resolution
+- [Commands](docs/commands.md): every command, its flags and exit codes
+- [Keys and re-encryption](docs/keys.md): adding, scoping and revoking keys
+- [CI](docs/ci.md): composite action, reusable workflow, Docker
+- [Upgrading from v1](docs/upgrading.md)
 
-### Add a team member
+## Contributing
 
-```bash
-# They generate a key pair
-age-keygen -o ~/.config/sops/age/keys.txt
-
-# They share their public key, you add it
-envctl keys add alice age1ql3z7hjy54pw3hyww5ayf...
-```
-
-This adds the key to `.envctl.yaml` and re-encrypts all secrets files automatically.
-
-### Scope a recipient to one environment
-
-```bash
-envctl keys add dev age1xyz789... --env local
-envctl keys list --env local
-```
-
-`dev` can now decrypt `local` only; the global recipients still can. A global recipient cannot be removed from a single environment: `envctl keys remove <name> --env <env>` fails and tells you to remove it without `--env`.
-
-### Add a CI key
-
-```bash
-age-keygen  # copy private key → GitHub repo secret SOPS_AGE_KEY
-envctl keys add ci age1abc123...
-```
-
-### List / remove recipients
-
-```bash
-envctl keys list
-envctl keys remove alice
-envctl keys remove dev --env local
-```
-
-envctl refuses a removal that would leave an environment whose secrets file exists with no recipients (`cannot remove "<name>": environment "<env>" would have no recipients left`) and changes nothing. While an environment has no secrets file yet, you can remove its last recipient, for example to fix a wrong key right after `envctl init`; `envctl edit` then refuses to create the file until a recipient is added.
-
-### Re-encryption and git history
-
-- Every `keys add` and `keys remove` rotates the data key of each affected file, so **the whole file changes in git**, not only the recipient block. Expect a full diff on review.
-- Rotation does not rewrite git history. A removed key can still decrypt older versions of the files from history, and `keys remove` prints a warning saying so. To fully revoke access, also change the secret values themselves.
-- Before changing anything, `keys add|remove` checks that your age key can decrypt every targeted secrets file. If one cannot be decrypted, the command lists it and changes nothing: run it as a recipient of every targeted file (for a global change, someone who holds every environment's key).
-- `keys add|remove` only manages files whose sops metadata lists age recipients alone. A file that also lists another key source (`hc_vault`, `kms`, `gcp_kms`, `azure_kv`, `pgp`, `key_groups`…) is refused before anything changes, because rotating it would hand the new data key to that source. Remove the extra source with sops, then re-run.
-- If re-keying still fails part-way, `.envctl.yaml` is left untouched and the error lists the files already re-keyed. Fix the cause and re-run the same command: a file you can no longer decrypt (because you removed your own key) and that already has the expected recipients is reported as already up to date and skipped, with a warning that its data key was not rotated; a remaining recipient should re-run the command to rotate it. Every file you can decrypt is rotated again.
-
-## Upgrading from v1
-
-v2 is a major release because every `keys add|remove` now re-keys and rotates the secrets files, and `secrets` paths are resolved from the `.envctl.yaml` folder instead of the current directory. There is no config migration: an existing `.envctl.yaml` keeps working and keeps the same recipients, with one caveat.
-
-Recipient names are now validated when the config loads: letters, digits, `.`, `_` or `-`, starting with a letter or a digit. A v1 config with any other name (for example `alice smith` or `@ci`) fails to load, so every command that reads it (`verify`, `generate`, `diff`, `edit`, `keys`) fails until you rename it in `.envctl.yaml` by hand. The same applies to an environment named `global`, which is now reserved. Recipient keys are validated as well: each must be a single `age1…` recipient with a valid bech32 checksum, so a mistyped key or a comma-separated list in one value fails to load.
-
-The GitHub Action pulls the `latest` image by default (`envctl-version: latest`), so consumer workflows move to v2 as soon as it is released. Pin `envctl-version` to a v1 tag if you need time to check your config.
-
-The Go module path changed, so install with the `/v2` path:
-
-```bash
-go install github.com/PillowPillow/envctl/v2@latest
-```
-
-Install script, Docker image and `envctl update` are unchanged.
-
-## Development
-
-```bash
-# Build
-make build
-
-# Test
-make test
-
-# Lint (requires golangci-lint)
-make lint
-
-# All checks
-make check
-
-# Install git pre-commit hook
-make hooks
-```
+Bug fixes, documentation and tests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first; report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT
+Copyright © 2026 Nicolas Gaignoux. envctl is free software released under the GNU General Public License v3.0 — see [LICENSE](LICENSE).
