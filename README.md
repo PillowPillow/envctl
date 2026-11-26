@@ -69,7 +69,11 @@ Or with the install script, then install [`sops`](https://github.com/getsops/sop
 curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | bash
 ```
 
-The script installs the latest release in `~/.envctl/bin` and checks its sha256 checksum; if the [GitHub CLI](https://cli.github.com) is signed in, it also verifies that the archive was built by this repository's release workflow. [Read `install.sh`](install.sh) before you run it. To pin a version, pass it to `bash`, not to `curl`: `curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | ENVCTL_VERSION=v2.1.0 bash`. `INSTALL_DIR` works the same way.
+The script installs the latest release in `~/.envctl/bin` and checks its sha256 checksum; if the [GitHub CLI](https://cli.github.com) is signed in, it also verifies that the archive was built by this repository's release workflow. [Read `install.sh`](install.sh) before you run it. To pin a version, pass it to `bash`, not to `curl` (`INSTALL_DIR` works the same way):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/PillowPillow/envctl/main/install.sh | ENVCTL_VERSION=v2.1.0 bash
+```
 
 envctl runs on macOS and Linux, on amd64 and arm64.
 
@@ -108,13 +112,14 @@ gh attestation verify envctl_<os>_<arch>.tar.gz --repo PillowPillow/envctl --sig
 In a project that already has a `.env.example`:
 
 ```sh
-envctl init                                                                # writes .envctl.yaml, creates .envctl/, updates .gitignore
-mkdir -p ~/.config/sops/age && age-keygen -o ~/.config/sops/age/keys.txt  # your key pair, if you do not have one yet
-export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt                      # where sops finds it (put this in your shell profile)
-envctl keys add me <your age1… public key>                                 # lets your key open every environment
-envctl edit --env local                                                    # fill in the values, saved encrypted
-envctl verify --env local                                                  # checks every required variable has a value
-envctl generate --env local --output .env                                  # writes the plaintext .env you run with
+envctl init                                    # creates .envctl.yaml and .envctl/
+mkdir -p ~/.config/sops/age
+age-keygen -o ~/.config/sops/age/keys.txt      # your key pair, if you have none
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt   # add to your shell profile
+envctl keys add me <your age1… public key>     # your key opens every environment
+envctl edit --env local                        # fill in the values, saved encrypted
+envctl verify --env local                      # every required variable has a value
+envctl generate --env local --output .env      # writes the .env you run with
 ```
 
 Commit `.envctl.yaml` and `.envctl/`. A teammate who clones the repo only needs their key added to run `envctl generate`.
