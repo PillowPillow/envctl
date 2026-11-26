@@ -26,29 +26,42 @@ runs:
   steps:
     - name: Pull envctl image
       shell: bash
+      env:
+        GHCR_TOKEN: ${{ github.token }}
+        ENVCTL_IMAGE_TAG: ${{ inputs.envctl-version }}
       run: |
-        echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker pull ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }}
+        echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+        docker pull "ghcr.io/pillowpillow/envctl:${ENVCTL_IMAGE_TAG}"
 
     - name: Run envctl verify
       if: inputs.command == 'verify'
       shell: bash
+      env:
+        ENVCTL_ENV: ${{ inputs.environment }}
+        ENVCTL_IMAGE_TAG: ${{ inputs.envctl-version }}
+        ENVCTL_STRICT: ${{ inputs.strict }}
       run: |
+        args=(verify --env "$ENVCTL_ENV")
+        [[ "$ENVCTL_STRICT" == true ]] && args+=(--strict)
         docker run --rm \
-          -v "${{ github.workspace }}:/workspace" \
+          -v "${GITHUB_WORKSPACE}:/workspace" \
           -w /workspace \
           -e SOPS_AGE_KEY \
-          ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
-          verify --env ${{ inputs.environment }}${{ inputs.strict == 'true' && ' --strict' || '' }}
+          "ghcr.io/pillowpillow/envctl:${ENVCTL_IMAGE_TAG}" \
+          "${args[@]}"
 
     - name: Run envctl generate
       if: inputs.command == 'generate'
       shell: bash
+      env:
+        ENVCTL_ENV: ${{ inputs.environment }}
+        ENVCTL_OUTPUT: ${{ inputs.output-path }}
+        ENVCTL_IMAGE_TAG: ${{ inputs.envctl-version }}
       run: |
         docker run --rm \
-          -v "${{ github.workspace }}:/workspace" \
+          -v "${GITHUB_WORKSPACE}:/workspace" \
           -w /workspace \
           -u "$(id -u):$(id -g)" \
           -e SOPS_AGE_KEY \
-          ghcr.io/pillowpillow/envctl:${{ inputs.envctl-version }} \
-          generate --env ${{ inputs.environment }} -o ${{ inputs.output-path }}
+          "ghcr.io/pillowpillow/envctl:${ENVCTL_IMAGE_TAG}" \
+          generate --env "$ENVCTL_ENV" -o "$ENVCTL_OUTPUT"

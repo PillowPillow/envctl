@@ -24,3 +24,6 @@ coverage.out
 # SOPS decrypted files (never commit)
 secrets.*.yaml
 !*.enc.yaml
+
+# GoReleaser output
+dist/

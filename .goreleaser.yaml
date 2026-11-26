@@ -24,6 +24,9 @@ sboms:
     cmd: syft
     args: ["${artifact}", "--output", "spdx-json=${document}"]
 
+release:
+  draft: true
+
 changelog:
   sort: asc
   filters:

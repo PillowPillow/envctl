@@ -1,4 +1,4 @@
-# Builds and releases envctl binaries + Docker image when a tag is pushed
+# Builds and releases envctl binaries, the Docker image and the Homebrew formula when a tag is pushed
 name: Release
 
 on:
@@ -6,9 +6,7 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-  packages: write
+permissions: {}
 
 env:
   GOPROXY: "https://proxy.golang.org,off"
@@ -17,7 +15,16 @@ env:
 jobs:
   release:
     runs-on: ubuntu-26.04
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
+      - name: Check the tag is a version
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Tag $GITHUB_REF_NAME is not vX.Y.Z" >&2; exit 1; }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -26,10 +33,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Install syft (SBOM)
+        env:
+          SYFT_VERSION: "1.54.0"
+          SYFT_SHA256: "54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860"
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.54.0/install.sh | sh -s -- -b /usr/local/bin v1.54.0
+          curl -fsSLo syft.tar.gz "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+          echo "${SYFT_SHA256}  syft.tar.gz" | sha256sum -c -
+          tar -xzf syft.tar.gz syft
+          sudo install -m 0755 syft /usr/local/bin/syft
+          rm syft syft.tar.gz
 
       - name: Install age and sops
         # Keep SOPS_VERSION and SOPS_SHA256 in sync with ci.yaml and the Dockerfile (ARG SOPS_VERSION / SOPS_SHA256_AMD64).
@@ -52,11 +67,26 @@ jobs:
           version: "~> v2"
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+
+      # GoReleaser leaves a draft so nobody downloads archives before their attestation exists.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
 
   docker:
     runs-on: ubuntu-26.04
     needs: release
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,11 +104,11 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       - name: Download release binaries
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p bin/linux-amd64 bin/linux-arm64
           gh release download "v${VERSION}" --pattern "envctl_linux_amd64.tar.gz" --output - | tar -xz -C bin/linux-amd64
@@ -94,3 +124,86 @@ jobs:
           tags: |
             ghcr.io/pillowpillow/envctl:${{ env.VERSION }}
             ghcr.io/pillowpillow/envctl:latest
+
+  tap:
+    runs-on: ubuntu-26.04
+    needs: release
+    environment: release
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download and verify checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt
+          gh attestation verify checksums.txt --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yaml"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: PillowPillow/homebrew-tap
+          # A deploy key that can write to the tap only; the workflow token cannot push to another repository.
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
+          path: tap
+
+      - name: Update the Homebrew formula
+        run: |
+          mkdir -p tap/Formula
+          homebrew/render-formula.sh "${GITHUB_REF_NAME#v}" checksums.txt > tap/Formula/envctl.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/envctl.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "Brew formula update for envctl version $GITHUB_REF_NAME"
+          git push
+
+  smoke:
+    needs: tap
+    permissions:
+      contents: read
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install with curl
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ENVCTL_VERSION="$GITHUB_REF_NAME" INSTALL_DIR="$RUNNER_TEMP/curl" bash install.sh | tee "$RUNNER_TEMP/curl.log"
+          grep -F "Provenance verified." "$RUNNER_TEMP/curl.log"
+          "$RUNNER_TEMP/curl/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install with go install
+        run: |
+          GOBIN="$RUNNER_TEMP/go" go install "github.com/PillowPillow/envctl/v2@$GITHUB_REF_NAME"
+          "$RUNNER_TEMP/go/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
+          "$RUNNER_TEMP/go/envctl" update | grep -F "go install github.com/PillowPillow/envctl/v2@latest"
+
+      - name: Install with Homebrew
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          command -v brew >/dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew install pillowpillow/tap/envctl
+          brew test envctl
+          "$(brew --prefix)/bin/envctl" version | grep -Fx "envctl ${GITHUB_REF_NAME#v}"
+          "$(brew --prefix)/bin/envctl" update | grep -F "brew upgrade envctl"
