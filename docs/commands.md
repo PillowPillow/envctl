@@ -104,6 +104,8 @@ Replace the binary with the latest release. It applies to installs made with the
 
 When it was installed with the install script, envctl also checks for a new release in the background once in a while and prints a one-line notice after the command output.
 
+Set `ENVCTL_NO_UPDATE_CHECK=1` to turn that check off, for example in a sandbox or a CI image where the binary is pinned. `envctl update` still works when you run it.
+
 ## `envctl version`
 
 Print the installed version.

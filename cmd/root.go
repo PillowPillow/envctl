@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,8 +54,15 @@ var skipUpdateCheckCommands = map[string]bool{
 	"completion": true,
 }
 
+func backgroundUpdateCheckEnabled() bool {
+	if optOut, err := strconv.ParseBool(os.Getenv("ENVCTL_NO_UPDATE_CHECK")); err == nil && optOut {
+		return false
+	}
+	return appVersion != "" && appVersion != "dev" && !installedWithGo && !isHomebrewInstall()
+}
+
 func startBackgroundUpdateCheck() <-chan string {
-	if appVersion == "" || appVersion == "dev" || installedWithGo || isHomebrewInstall() {
+	if !backgroundUpdateCheckEnabled() {
 		return nil
 	}
 
